@@ -25,6 +25,20 @@ project/
 
 项目已有目录优先，不强制搬迁大型产物。根目录控制文档应短，历史细节进入专题文档或归档。
 
+## Workspace hygiene
+
+目录整理属于 provenance，不是装饰。只在实验周期边界进行，并遵循：
+
+1. 先列目录大小、搜索路径引用、检查所有 repo 的 tracked dirty 和注册 worktree；
+2. 根目录只留热控制文档，专题内容通过单一索引进入，不堆兼容软链接；
+3. cache、checkpoint、传输包和冷讨论可以进入带日期归档；
+4. repo、worktree、dataset、weights、output、`video.npz` 和未登记 figure 默认保护；
+5. 整理后复查 registry、artifact path、Git commit/dirty 和 human review 入口；
+6. 同一 dump -> offline -> online 冻结周期内不做路径重排。
+
+只有同类整理动作重复出现后才编写自动清理脚本；自动化必须默认 dry-run，不能按文件名猜测
+实验产物是否可删。
+
 ## ID 与 JSONL
 
 - Experiment：`EXP-####`
