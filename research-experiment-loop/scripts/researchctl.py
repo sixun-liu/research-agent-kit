@@ -33,6 +33,7 @@ SCRIPT_COMMANDS = {
     "close": "close_experiment.py",
     "schedule": "evaluate_research_scheduler.py",
     "task": "complete_research_task.py",
+    "reconcile": "reconcile_experiment.py",
 }
 QUERY_COMMANDS = {"list", "show", "find", "next"}
 

@@ -130,5 +130,6 @@ Subagents may act as read-only scout, blind visual observer, mechanism red-team,
 - `scripts/close_experiment.py`: closure event and active-state cleanup.
 - `scripts/evaluate_research_scheduler.py`: read-only interrupt evaluation and explicit advisory enqueue.
 - `scripts/complete_research_task.py`: advisory task closure with artifact/insight links.
+- `scripts/reconcile_experiment.py`: explicit orphan adoption or evidence-backed legacy state repair.
 - `scripts/research_status.py`: read-only compact project, experiment, review, task, and scheduler view.
 - `scripts/audit_research_state.py`: schema, references, paths, and Git audit.

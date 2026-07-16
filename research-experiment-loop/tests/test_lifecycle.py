@@ -858,6 +858,93 @@ class ResearchLifecycleTest(unittest.TestCase):
         )
         self.assertEqual(experiment_id, "EXP-0001")
 
+    def test_legacy_reconciliation_uses_event_time_not_file_order(self) -> None:
+        self.initialize()
+        registry = self.root / "research" / "experiments.jsonl"
+        records = [
+            {
+                "record_type": "experiment",
+                "schema_version": 1,
+                "id": "EXP-9000",
+                "title": "Out-of-order completed legacy experiment",
+                "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-01-01T00:00:00Z",
+                "status": "preregistered",
+                "human_visual_confirmation": "not_required",
+            },
+            {
+                "record_type": "experiment_event",
+                "schema_version": 1,
+                "id": "EVT-9000",
+                "experiment_id": "EXP-9000",
+                "created_at": "2026-01-03T00:00:00Z",
+                "status": "complete",
+                "verdict": "legacy-complete",
+            },
+            {
+                "record_type": "experiment_event",
+                "schema_version": 1,
+                "id": "EVT-9001",
+                "experiment_id": "EXP-9000",
+                "created_at": "2026-01-02T00:00:00Z",
+                "status": "offline_in_progress",
+                "verdict": "backfilled-earlier-event",
+            },
+            {
+                "record_type": "experiment",
+                "schema_version": 1,
+                "id": "EXP-9001",
+                "title": "Orphan legacy experiment",
+                "created_at": "2026-01-04T00:00:00Z",
+                "updated_at": "2026-01-04T00:00:00Z",
+                "status": "preregistered",
+                "human_visual_confirmation": "not_required",
+            },
+        ]
+        with registry.open("a", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps(record, separators=(",", ":")) + "\n")
+        card = self.root / "research" / "cards" / "EXP-9001.md"
+        card.write_text("# EXP-9001\n\nExisting evidence says this cycle is complete.\n", encoding="utf-8")
+
+        status = self.run_script("researchctl.py", "status", "--root", str(self.root), "--json")
+        status_value = json.loads(status.stdout)
+        self.assertNotIn("EXP-9000", status_value["orphan_open_experiments"])
+        self.assertIn("EXP-9001", status_value["orphan_open_experiments"])
+
+        self.run_script(
+            "researchctl.py",
+            "reconcile",
+            "EXP-9001",
+            "--root",
+            str(self.root),
+            "--adopt",
+            "--reason",
+            "Resume the newest legacy card before resolving its recorded result.",
+        )
+        state = yaml.safe_load((self.root / "research" / "project_state.yaml").read_text())
+        self.assertEqual(state["active_experiment_id"], "EXP-9001")
+        self.run_script(
+            "researchctl.py",
+            "reconcile",
+            "EXP-9001",
+            "--root",
+            str(self.root),
+            "--complete-legacy",
+            "--verdict",
+            "legacy-card-result-backfilled",
+            "--reason",
+            "The existing card already records the result; only machine state was missing.",
+            "--evidence-path",
+            str(card),
+        )
+        audit = self.run_script(
+            "audit_research_state.py", "--root", str(self.root), "--strict", "--json"
+        )
+        self.assertTrue(json.loads(audit.stdout)["ok"])
+        status = self.run_script("researchctl.py", "status", "--root", str(self.root), "--json")
+        self.assertNotIn("EXP-9001", json.loads(status.stdout)["orphan_open_experiments"])
+
 
 if __name__ == "__main__":
     unittest.main()

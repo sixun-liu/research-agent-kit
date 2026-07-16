@@ -144,7 +144,10 @@ def latest_experiment_state(
     experiment: dict[str, Any], events: list[dict[str, Any]]
 ) -> dict[str, Any]:
     value = dict(experiment)
-    for event in events:
+    for event in sorted(
+        events,
+        key=lambda item: (str(item.get("created_at") or ""), str(item.get("id") or "")),
+    ):
         if event.get("experiment_id") != experiment.get("id"):
             continue
         for key in ("status", "verdict", "decision", "human_visual_confirmation"):
@@ -156,7 +159,10 @@ def latest_experiment_state(
 
 def latest_task_state(task: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
     value = dict(task)
-    for event in events:
+    for event in sorted(
+        events,
+        key=lambda item: (str(item.get("created_at") or ""), str(item.get("id") or "")),
+    ):
         if event.get("task_id") != task.get("id"):
             continue
         for key in (
