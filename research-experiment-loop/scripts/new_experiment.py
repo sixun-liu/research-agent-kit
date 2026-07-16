@@ -39,6 +39,8 @@ def main() -> int:
     parser.add_argument("--hypothesis", required=True)
     parser.add_argument("--primary-problem")
     parser.add_argument("--baseline-id")
+    parser.add_argument("--hypothesis-family", required=True)
+    parser.add_argument("--work-mode", choices=("theory", "practice", "mixed", "instrumentation"), required=True)
     parser.add_argument("--independent-variable", required=True)
     parser.add_argument("--expected-action", required=True)
     parser.add_argument("--completion-signal", action="append", default=[])
@@ -102,7 +104,7 @@ def main() -> int:
         raise SystemExit(f"Unknown claim ids: {', '.join(unknown_claims)}")
     record = {
         "record_type": "experiment",
-        "schema_version": 2,
+        "schema_version": 3,
         "id": experiment_id,
         "title": args.title,
         "created_at": now,
@@ -113,6 +115,8 @@ def main() -> int:
         "stage": state.get("stage"),
         "primary_problem": primary_problem,
         "baseline_id": baseline_id,
+        "hypothesis_family": args.hypothesis_family,
+        "work_mode": args.work_mode,
         "question": args.question,
         "hypothesis": args.hypothesis,
         "independent_variable": args.independent_variable,
@@ -155,6 +159,7 @@ def main() -> int:
 - 阶段：`{state.get('stage')}`
 - 当前主要矛盾：{primary_problem or '待补充'}
 - Canonical baseline：`{baseline_id or 'unassigned'}`
+- 假说族：`{args.hypothesis_family}`；工作模式：`{args.work_mode}`
 - 唯一变量：{args.independent_variable}
 - 预期动作：{args.expected_action}
 - 完成正向信号：{'；'.join(args.completion_signal)}

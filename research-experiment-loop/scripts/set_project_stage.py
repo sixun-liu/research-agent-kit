@@ -13,6 +13,7 @@ from research_state_lib import (
     git_snapshot,
     load_yaml,
     update_project_state,
+    utc_now,
     write_yaml,
 )
 
@@ -83,6 +84,32 @@ def main() -> int:
             profile[field] = values
     write_yaml(profile_path, profile)
 
+    tasks_path = root / "research" / "tasks.jsonl"
+    if not tasks_path.exists():
+        tasks_path.write_text(
+            json.dumps(
+                {
+                    "record_type": "registry_meta",
+                    "schema_version": 1,
+                    "registry": "tasks",
+                    "created_at": utc_now(),
+                    "id_prefix": "TASK",
+                },
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    scheduler_path = root / "research" / "scheduler.yaml"
+    if not scheduler_path.exists():
+        scheduler_template = (
+            Path(__file__).resolve().parents[1]
+            / "assets"
+            / "project-template"
+            / "SCHEDULER.yaml"
+        ).read_text(encoding="utf-8")
+        scheduler_path.write_text(scheduler_template, encoding="utf-8")
+
     baseline = {
         "id": args.baseline_id,
         "name": args.baseline_name,
@@ -92,7 +119,7 @@ def main() -> int:
     }
     updated = update_project_state(
         root,
-        schema_version=max(int(state.get("schema_version", 1)), 2),
+        schema_version=max(int(state.get("schema_version", 1)), 3),
         stage=args.stage,
         north_star=args.north_star,
         primary_problem=args.primary_problem,

@@ -28,6 +28,20 @@ VALID_DECISIONS = {
     "inconclusive",
     "invalid_provenance",
 }
+VALID_WORK_MODES = {"theory", "practice", "mixed", "instrumentation"}
+VALID_PROGRESS_TYPES = {"metric", "uncertainty_reduction", "route_closed", "efficiency", "none"}
+VALID_TASK_ACTIONS = {
+    "INTEGRITY",
+    "BREAKTHROUGH",
+    "REFLECT",
+    "INTUITION",
+    "THEORY_SYNC",
+    "PRACTICE_SYNC",
+    "SYNTHESIS",
+    "HUMAN_REVIEW",
+    "EFFICIENCY_REVIEW",
+}
+TERMINAL_TASK_STATUSES = {"complete", "cancelled"}
 
 
 def utc_now() -> str:
@@ -99,6 +113,20 @@ def experiment_records(root: Path) -> tuple[dict[str, dict[str, Any]], list[dict
     return experiments, events
 
 
+def task_records(root: Path) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    path = root / "research" / "tasks.jsonl"
+    if not path.exists():
+        return {}, []
+    records = load_jsonl(path)
+    tasks = {
+        str(record["id"]): record
+        for record in records
+        if record.get("record_type") == "research_task" and record.get("id")
+    }
+    events = [record for record in records if record.get("record_type") == "task_event"]
+    return tasks, events
+
+
 def latest_experiment_state(
     experiment: dict[str, Any], events: list[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -107,6 +135,18 @@ def latest_experiment_state(
         if event.get("experiment_id") != experiment.get("id"):
             continue
         for key in ("status", "verdict", "decision", "human_visual_confirmation"):
+            if event.get(key) is not None:
+                value[key] = event[key]
+        value["updated_at"] = event.get("created_at", value.get("updated_at"))
+    return value
+
+
+def latest_task_state(task: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
+    value = dict(task)
+    for event in events:
+        if event.get("task_id") != task.get("id"):
+            continue
+        for key in ("status", "result", "artifact_ids", "insight_ids"):
             if event.get(key) is not None:
                 value[key] = event[key]
         value["updated_at"] = event.get("created_at", value.get("updated_at"))

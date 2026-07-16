@@ -14,6 +14,8 @@
 - Canonical baseline：`{{canonical_baseline_id}}`
 - Active candidate：`{{active_candidate}}`
 - 阶段退出门：`{{stage_exit_gates}}`
+- Scheduler 建议：`{{scheduler_recommendations}}`
+- Open research tasks：`{{open_research_tasks}}`
 
 ## 正典基座
 

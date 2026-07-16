@@ -11,6 +11,7 @@ from research_state_lib import (
     TERMINAL_EXPERIMENT_STATUSES,
     VALID_CONFIRMATIONS,
     VALID_DECISIONS,
+    VALID_PROGRESS_TYPES,
     append_jsonl,
     experiment_records,
     latest_experiment_state,
@@ -36,6 +37,13 @@ def main() -> int:
     parser.add_argument("--limitation", action="append", default=[])
     parser.add_argument("--artifact-id", action="append", default=[])
     parser.add_argument("--next", required=True)
+    parser.add_argument("--progress-type", choices=sorted(VALID_PROGRESS_TYPES), required=True)
+    parser.add_argument("--progress-note", required=True)
+    parser.add_argument("--failure-axis")
+    parser.add_argument("--wall-hours", type=float, required=True)
+    parser.add_argument("--compute-hours", type=float, required=True)
+    parser.add_argument("--theory-output")
+    parser.add_argument("--practice-output")
     parser.add_argument("--action-status", choices=("occurred", "absent", "not_applicable"), required=True)
     parser.add_argument(
         "--completion-status", choices=("confirmed", "failed", "not_applicable"), required=True
@@ -49,6 +57,10 @@ def main() -> int:
         raise SystemExit("At least one --observation is required")
     if not args.limitation:
         raise SystemExit("At least one --limitation is required")
+    if args.wall_hours < 0 or args.compute_hours < 0:
+        raise SystemExit("--wall-hours and --compute-hours must be non-negative")
+    if args.decision == "negative" and not args.failure_axis:
+        raise SystemExit("A negative decision requires --failure-axis")
     if args.decision == "promote" and "pending" in (args.scoreboard_status, args.claim_status):
         raise SystemExit("A promoted experiment cannot close with pending scoreboard or claim status")
     if args.decision == "promote" and args.action_status != "occurred":
@@ -72,6 +84,13 @@ def main() -> int:
         if event.get("experiment_id") == experiment_id
     ):
         raise SystemExit("A v2 experiment must be frozen before closure")
+    work_mode = experiments[experiment_id].get("work_mode")
+    if work_mode == "theory" and not args.theory_output:
+        raise SystemExit("A theory cycle must record --theory-output")
+    if work_mode in {"practice", "instrumentation"} and not args.practice_output:
+        raise SystemExit(f"A {work_mode} cycle must record --practice-output")
+    if work_mode == "mixed" and (not args.theory_output or not args.practice_output):
+        raise SystemExit("A mixed cycle must record both --theory-output and --practice-output")
 
     artifacts = {
         str(record.get("id"))
@@ -100,6 +119,13 @@ def main() -> int:
         "limitations": args.limitation,
         "artifacts": args.artifact_id,
         "next": args.next,
+        "progress_type": args.progress_type,
+        "progress_note": args.progress_note,
+        "failure_axis": args.failure_axis,
+        "wall_hours": args.wall_hours,
+        "compute_hours": args.compute_hours,
+        "theory_output": args.theory_output,
+        "practice_output": args.practice_output,
         "expected_action_status": args.action_status,
         "completion_signal_status": args.completion_status,
         "human_visual_confirmation": args.human_confirmation,
@@ -121,6 +147,8 @@ def main() -> int:
                 f"- Decision：`{args.decision}`\n"
                 f"- 解释：{args.interpretation}\n"
                 f"- 预期动作：`{args.action_status}`；完成信号：`{args.completion_status}`\n"
+                f"- 进展：`{args.progress_type}`，{args.progress_note}\n"
+                f"- 耗时：wall `{args.wall_hours:.3f}h`；compute `{args.compute_hours:.3f}h`\n"
                 f"- 观察：{'；'.join(args.observation)}\n"
                 f"- 限制：{'；'.join(args.limitation)}\n"
                 f"- 下一步：{args.next}\n"

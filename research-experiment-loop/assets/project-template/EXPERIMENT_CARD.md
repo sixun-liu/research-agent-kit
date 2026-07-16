@@ -7,6 +7,8 @@
 - 当前阶段：`{{stage}}`
 - 当前主要矛盾：`{{primary_problem}}`
 - Canonical baseline：`{{baseline_id}}`
+- 假说族：`{{hypothesis_family}}`
+- 工作模式：`{{work_mode}}`
 - 唯一变量：`{{independent_variable}}`
 - 预期动作：`{{expected_action}}`
 - 完成正向信号：`{{completion_signals}}`

@@ -1,6 +1,6 @@
 ---
 name: research-experiment-loop
-description: Run reproducible scientific or engineering research with explicit project stages, canonical baselines, preregistered hypotheses, frozen provenance, machine-readable registries, offline-to-online evidence ladders, visual review artifacts, symmetric verdicts, and claim closure. Use when starting or resuming research experiments, planning autonomous compute work, auditing old results, converging competing method routes, investigating surprising results, transferring a research workflow to a new project, or deciding whether evidence is strong enough to promote a method or paper claim.
+description: Run reproducible scientific or engineering research with explicit project stages, canonical baselines, preregistered hypotheses, frozen provenance, machine-readable registries, cross-cycle interrupt scheduling, theory-practice balance, offline-to-online evidence ladders, visual review artifacts, symmetric verdicts, and claim closure. Use when starting or resuming research experiments, planning autonomous compute work, auditing old results, detecting stagnation or repeated failures, balancing theory with practice, converging competing method routes, investigating surprising results, transferring a research workflow to a new project, or deciding whether evidence is strong enough to promote a method or paper claim.
 ---
 
 # Research Experiment Loop
@@ -90,6 +90,14 @@ Use `scripts/record_observation.py` for the post-run data walk. Record observati
 
 Close with `scripts/close_experiment.py`: verify that the expected action and completion signals occurred, then set the scientific decision, limitations, artifacts, human-review state, scoreboard/claim closure, and exactly one next discriminating question. An absent action cannot support a method verdict. Run the strict audit after closure. Promote only when the project-specific gate is met.
 
+### 9. Evaluate Cross-Cycle Interrupts
+
+Run `scripts/evaluate_research_scheduler.py` after closure. Keep it read-only by default. It may
+recommend integrity review, breakthrough audit, reflection, constrained intuition, theory/practice
+synchronization, synthesis, efficiency review, or human review. Use `--enqueue` only after checking
+the reasons; queued tasks never launch experiments or modify method code. Complete them with
+`scripts/complete_research_task.py`.
+
 ## Use Subagents Deliberately
 
 Subagents may act as read-only scout, blind visual observer, mechanism red-team, provenance auditor, or synthesis reviewer. Give each a narrow question and immutable inputs. The main agent retains code changes, evidence merging, and final scientific judgment.
@@ -100,6 +108,8 @@ Subagents may act as read-only scout, blind visual observer, mechanism red-team,
 - `references/evidence-and-verdicts.md`: evidence quartet, tail analysis, and verdict rules.
 - `references/project-contract.md`: directory, JSONL, review, Git, and subagent conventions.
 - `references/stage-and-lifecycle.md`: stage transitions, canonical baselines, lifecycle commands, and domain profiles.
+- `references/research-scheduler.md`: cross-cycle triggers, priorities, task contracts, and creativity guardrails.
+- `references/method-patterns.md`: reusable Oracle, surgical, replay, fault-injection, canary, and control patterns.
 - `scripts/init_research_state.py`: non-destructive project bootstrap.
 - `scripts/set_project_stage.py`: freeze the current stage, primary problem, baseline, and exit gates.
 - `scripts/new_experiment.py`: experiment registration and card generation.
@@ -108,4 +118,6 @@ Subagents may act as read-only scout, blind visual observer, mechanism red-team,
 - `scripts/register_artifact.py`: artifact provenance registration.
 - `scripts/register_claim.py`: evidence-linked claim registration or supersession.
 - `scripts/close_experiment.py`: closure event and active-state cleanup.
+- `scripts/evaluate_research_scheduler.py`: read-only interrupt evaluation and explicit advisory enqueue.
+- `scripts/complete_research_task.py`: advisory task closure with artifact/insight links.
 - `scripts/audit_research_state.py`: schema, references, paths, and Git audit.

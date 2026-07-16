@@ -72,7 +72,7 @@ def main() -> int:
 
     created: list[str] = []
     skipped: list[str] = []
-    state = f'''schema_version: 2
+    state = f'''schema_version: 3
 project_id: {json.dumps(args.project_id)}
 updated_at: {json.dumps(now)}
 language: {json.dumps(args.language)}
@@ -108,6 +108,19 @@ human_review:
             "id_prefix": prefix,
         }
         write_once(research / filename, json.dumps(meta, ensure_ascii=False) + "\n", created, skipped)
+    task_meta = {
+        "record_type": "registry_meta",
+        "schema_version": 1,
+        "registry": "tasks",
+        "created_at": now,
+        "id_prefix": "TASK",
+    }
+    write_once(
+        research / "tasks.jsonl",
+        json.dumps(task_meta, ensure_ascii=False) + "\n",
+        created,
+        skipped,
+    )
 
     write_once(
         research / "README.md",
@@ -132,6 +145,10 @@ human_review:
         created,
         skipped,
     )
+    scheduler_template = (
+        Path(__file__).resolve().parents[1] / "assets" / "project-template" / "SCHEDULER.yaml"
+    ).read_text(encoding="utf-8")
+    write_once(research / "scheduler.yaml", scheduler_template, created, skipped)
     (research / "cards").mkdir(parents=True, exist_ok=True)
     write_once(
         review / "index.md",
