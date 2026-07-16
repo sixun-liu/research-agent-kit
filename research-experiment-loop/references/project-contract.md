@@ -12,6 +12,7 @@ project/
 ├── RESULTS_SCOREBOARD.md
 ├── research/
 │   ├── project_state.yaml
+│   ├── profile.yaml
 │   ├── experiments.jsonl
 │   ├── insights.jsonl
 │   ├── claims.jsonl
@@ -42,6 +43,7 @@ project/
 ## ID 与 JSONL
 
 - Experiment：`EXP-####`
+- Experiment event：`EVT-####`
 - Insight：`I-####`
 - Claim：`C-####`
 - Artifact：`ART-####`
@@ -54,6 +56,18 @@ JSONL 每行一个 object，第一行是 `registry_meta`。追加记录优于重
 最小 provenance：repo、branch、commit、tracked dirty、expanded config、数据切片、
 输出路径、strict/online 约束和 external prior 状态。没有 commit 指纹的旧产物标为
 `historical_only`，可用于提出假说，不可单独支撑 headline。
+
+Canonical baseline 还必须绑定稳定 ID、commit、展开配置和评测协议。每个 v2 实验记录
+`baseline_id`、唯一变量、预期动作和完成正向信号。
+
+## Lifecycle
+
+- 同时最多一个 active experiment；新卡不得覆盖未结案实验。
+- 冻结使用 append-only event，保存展开配置 hash、数据切片、输出、seed/repeat 和禁用输入。
+- 每个 run 的数据散步观察追加为 event，不改写原始预注册。
+- 结案追加 closure event，并清空 active ID；`promote` 必须闭环 scoreboard、claim、artifact
+  和 human review。
+- 历史 schema v1 保持可读；新 schema v2 才强制阶段和 lifecycle 字段。
 
 ## Human Review
 

@@ -31,6 +31,8 @@
 
 读取 `AGENTS.md`、当前状态、计划、短清单、scoreboard、最近 devlog 和 machine registry。
 核对 canonical repo 的 branch/commit/tracked dirty。只把有 fingerprint 的结果当正式证据。
+同时核对当前阶段、北极星、主要矛盾、canonical baseline ID、active candidate 和 parked lanes。
+方法昵称相同但 baseline ID 不同的结果只能作历史对照。
 
 ### B. 一句话问题
 
@@ -50,6 +52,9 @@
 - primary/tail/visual metrics；
 - output 和 provenance；
 - promotion/stop conditions。
+
+还要记录 baseline ID、唯一变量、预期中间动作和完成正向信号。预期动作没有发生时，结果不能
+解释成方法正负证据。
 
 ### D. 证据梯度
 
@@ -75,6 +80,16 @@
 
 分别写：事实、观察、解释、反证、裁决、下一项最小判别实验。完成的动作进 devlog，
 可引用结果才进 scoreboard，突破线索进 insights registry。
+
+每个 run 结束后做一次短数据散步：检查分布、最差段、异常空间模式和恢复行为，保存1-3条
+观察。结案时明确 artifact、人工审查、scoreboard 和 claim registry 是已更新、无需更新还是
+仍 pending；`promote` 不允许 pending。
+
+## 阶段外循环
+
+实验内循环解决单个可证伪问题；每个块结束后检查阶段退出门。进入收敛期后停止无关新路线，
+只允许 canonical candidate 的重复、安全集、正式口径与图证。进入写作期后，新实验必须直接
+关闭 claim-evidence matrix 的缺口，否则停车。详见 `stage-and-lifecycle.md`。
 
 ## 长时间自主作业
 

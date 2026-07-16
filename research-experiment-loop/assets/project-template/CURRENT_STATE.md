@@ -6,6 +6,15 @@
 
 `{{one_line_state}}`
 
+## 阶段控制
+
+- 当前阶段：`{{stage}}`
+- 北极星：`{{north_star}}`
+- 当前主要矛盾：`{{primary_problem}}`
+- Canonical baseline：`{{canonical_baseline_id}}`
+- Active candidate：`{{active_candidate}}`
+- 阶段退出门：`{{stage_exit_gates}}`
+
 ## 正典基座
 
 - 仓库：`{{canonical_repo}}`

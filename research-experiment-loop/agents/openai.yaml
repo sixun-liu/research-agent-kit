@@ -1,4 +1,4 @@
 interface:
   display_name: "Research Experiment Loop"
-  short_description: "Run rigorous, insight-driven research experiment cycles"
-  default_prompt: "Use $research-experiment-loop to preregister, execute, and audit a reproducible research experiment cycle."
+  short_description: "Converge reproducible research from hypothesis to claim"
+  default_prompt: "Use $research-experiment-loop to stage, preregister, execute, close, and audit a reproducible research experiment cycle."

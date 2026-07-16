@@ -30,6 +30,7 @@
 - 视觉失败不能被 ATE 改善掩盖，ATE 失败也不能直接否定信号的 mapping 信息；
 - 不因结果符合预期而省略重复 run 或安全集；
 - 不因某个 consumer 失败就宣称原始 signal 无信息。
+- 预期中间动作没有发生时，实验只能判为 instrumentation/provenance 不足，不能据此判方法正负。
 
 ## 五层故障拆分
 
@@ -61,3 +62,4 @@ Machine registry 中的 claim 至少区分：
 - `retracted`。
 
 `paper-ready` 需要跨序列、受控干预、图证和明确限制，不由单个漂亮数字触发。
+Schema v2 的 paper-ready claim 还必须引用 experiment/artifact ID，并明确人工审查状态。

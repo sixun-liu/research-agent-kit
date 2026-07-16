@@ -4,37 +4,20 @@
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import re
 from pathlib import Path
 
-
-def utc_now() -> str:
-    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def load_yaml(path: Path) -> dict:
-    try:
-        import yaml
-    except ImportError as exc:
-        raise SystemExit("PyYAML is required to update project_state.yaml") from exc
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise SystemExit(f"Invalid project state: {path}")
-    return data
-
-
-def next_id(path: Path) -> str:
-    maximum = 0
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        record = json.loads(line)
-        match = re.fullmatch(r"EXP-(\d+)", str(record.get("id", "")))
-        if match:
-            maximum = max(maximum, int(match.group(1)))
-    return f"EXP-{maximum + 1:04d}"
+from research_state_lib import (
+    append_jsonl,
+    canonical_repo,
+    git_snapshot,
+    load_jsonl,
+    load_yaml,
+    next_id,
+    update_project_state,
+    utc_now,
+)
 
 
 def slugify(value: str) -> str:
@@ -42,13 +25,9 @@ def slugify(value: str) -> str:
     return slug[:48] or "experiment"
 
 
-def update_active_id(path: Path, experiment_id: str, now: str) -> None:
-    text = path.read_text(encoding="utf-8")
-    text, count = re.subn(r"(?m)^active_experiment_id:\s*.*$", f"active_experiment_id: {experiment_id}", text, count=1)
-    if count != 1:
-        raise SystemExit("project_state.yaml lacks a unique active_experiment_id field")
-    text, _ = re.subn(r"(?m)^updated_at:\s*.*$", f'updated_at: "{now}"', text, count=1)
-    path.write_text(text, encoding="utf-8")
+def require_list(name: str, values: list[str]) -> None:
+    if not values:
+        raise SystemExit(f"At least one --{name} is required")
 
 
 def main() -> int:
@@ -58,6 +37,12 @@ def main() -> int:
     parser.add_argument("--slug")
     parser.add_argument("--question", required=True)
     parser.add_argument("--hypothesis", required=True)
+    parser.add_argument("--primary-problem")
+    parser.add_argument("--baseline-id")
+    parser.add_argument("--independent-variable", required=True)
+    parser.add_argument("--expected-action", required=True)
+    parser.add_argument("--completion-signal", action="append", default=[])
+    parser.add_argument("--claim-id", action="append", default=[])
     parser.add_argument("--lane", choices=("planned", "breakthrough_followup"), default="planned")
     parser.add_argument("--priority", choices=("low", "normal", "high"), default="normal")
     parser.add_argument("--alternative", action="append", default=[])
@@ -74,7 +59,17 @@ def main() -> int:
         raise SystemExit("Research state is missing; run init_research_state.py first")
 
     state = load_yaml(state_path)
-    experiment_id = next_id(registry)
+    if state.get("active_experiment_id"):
+        raise SystemExit(
+            f"Active experiment {state['active_experiment_id']} must be closed or blocked before creating another"
+        )
+    require_list("alternative", args.alternative)
+    require_list("control", args.control)
+    require_list("metric", args.metric)
+    require_list("stop-condition", args.stop_condition)
+    require_list("completion-signal", args.completion_signal)
+
+    experiment_id = next_id(registry, "EXP")
     now = utc_now()
     review_value = state.get("human_review", {}).get("root", root / "figures" / "review")
     review_root = Path(review_value)
@@ -85,10 +80,29 @@ def main() -> int:
     if card_path.exists() or review_dir.exists():
         raise SystemExit(f"Refusing to overwrite {experiment_id} artifacts")
 
-    repo = state.get("canonical_repo", {})
+    snapshot = git_snapshot(canonical_repo(root, state))
+    if not snapshot["tracked_clean"]:
+        raise SystemExit("Refusing to preregister against a canonical repo with tracked changes")
+    baseline = state.get("canonical_baseline", {})
+    if not isinstance(baseline, dict):
+        baseline = {}
+    primary_problem = args.primary_problem or state.get("primary_problem")
+    baseline_id = args.baseline_id or baseline.get("id")
+    if not primary_problem:
+        raise SystemExit("A primary problem is required in project state or --primary-problem")
+    if not baseline_id:
+        raise SystemExit("A canonical baseline id is required in project state or --baseline-id")
+    known_claims = {
+        str(record.get("id"))
+        for record in load_jsonl(research / "claims.jsonl")
+        if record.get("record_type") == "claim"
+    }
+    unknown_claims = sorted(set(args.claim_id) - known_claims)
+    if unknown_claims:
+        raise SystemExit(f"Unknown claim ids: {', '.join(unknown_claims)}")
     record = {
         "record_type": "experiment",
-        "schema_version": 1,
+        "schema_version": 2,
         "id": experiment_id,
         "title": args.title,
         "created_at": now,
@@ -96,20 +110,27 @@ def main() -> int:
         "status": "preregistered",
         "priority": args.priority,
         "lane": args.lane,
+        "stage": state.get("stage"),
+        "primary_problem": primary_problem,
+        "baseline_id": baseline_id,
         "question": args.question,
         "hypothesis": args.hypothesis,
+        "independent_variable": args.independent_variable,
+        "expected_action": args.expected_action,
+        "completion_signals": args.completion_signal,
+        "claim_ids": args.claim_id,
         "alternatives": args.alternative,
         "controls": args.control,
         "primary_metrics": args.metric,
         "stop_conditions": args.stop_condition,
         "evidence_plan": {"numerical": [], "spatial": [], "temporal": [], "causal": []},
         "provenance": {
-            "analysis_repo": repo.get("path"),
-            "analysis_branch": repo.get("branch"),
-            "analysis_commit": repo.get("commit"),
-            "analysis_tracked_clean": repo.get("tracked_clean_at_snapshot"),
+            "analysis_repo": snapshot["repo"],
+            "analysis_branch": snapshot["branch"],
+            "analysis_commit": snapshot["commit"],
+            "analysis_tracked_clean": snapshot["tracked_clean"],
         },
-        "gpu_policy": "offline verdict required before launch",
+        "compute_policy": "lowest-cost evidence required before expensive launch",
         "human_review_path": str(review_dir),
         "human_visual_confirmation": "pending",
         "verdict": None,
@@ -123,11 +144,20 @@ def main() -> int:
     card_path.write_text(
         f"""# {experiment_id}：{args.title}
 
-状态：`preregistered`，GPU：`not approved`，人工看图：`pending`。
+状态：`preregistered`，高成本运行：`not approved`，人工看图：`pending`。
 
 ## 一句话问题
 
 {args.question}
+
+## 阶段与基座
+
+- 阶段：`{state.get('stage')}`
+- 当前主要矛盾：{primary_problem or '待补充'}
+- Canonical baseline：`{baseline_id or 'unassigned'}`
+- 唯一变量：{args.independent_variable}
+- 预期动作：{args.expected_action}
+- 完成正向信号：{'；'.join(args.completion_signal)}
 
 ## 假说
 
@@ -164,13 +194,19 @@ def main() -> int:
     )
     review_dir.mkdir(parents=True)
     (review_dir / "README.md").write_text(
-        f"# {experiment_id} Review\n\n实验卡：`{card_path}`。\n\n尚未生成紧凑图；用户确认：`pending`。\n",
+        f"# {experiment_id} Review\n\n实验卡：`{card_path}`。\n\n"
+        "尚未生成紧凑图；用户确认：`pending`。\n",
         encoding="utf-8",
     )
-    with registry.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-    update_active_id(state_path, experiment_id, now)
-    print(json.dumps({"id": experiment_id, "card": str(card_path), "review": str(review_dir)}, ensure_ascii=False, indent=2))
+    append_jsonl(registry, record)
+    update_project_state(root, active_experiment_id=experiment_id)
+    print(
+        json.dumps(
+            {"id": experiment_id, "card": str(card_path), "review": str(review_dir)},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 
