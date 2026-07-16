@@ -173,6 +173,14 @@ class ResearchLifecycleTest(unittest.TestCase):
         )
         return experiment_id
 
+    def test_grouped_help_and_command_help(self) -> None:
+        overview = self.run_script("researchctl.py", "--help")
+        self.assertIn("Recover and inspect", overview.stdout)
+        self.assertIn("Typical cycle", overview.stdout)
+        command = self.run_script("researchctl.py", "help", "new")
+        self.assertIn("--template", command.stdout)
+        self.assertIn("--hypothesis-family", command.stdout)
+
     def test_full_lifecycle_and_strict_audit(self) -> None:
         self.initialize()
         for filename in (

@@ -37,16 +37,62 @@ SCRIPT_COMMANDS = {
     "relocate": "relocate_project.py",
 }
 QUERY_COMMANDS = {"list", "show", "find", "next"}
+COMMAND_GROUPS = (
+    (
+        "Recover and inspect",
+        (
+            ("status", "compact project, active-cycle, audit, and scheduler state"),
+            ("next", "print the next control-plane action"),
+            ("audit", "validate schemas, references, paths, and Git provenance"),
+            ("list/show/find", "query experiments, artifacts, claims, insights, and tasks"),
+        ),
+    ),
+    (
+        "Run one cycle",
+        (
+            ("new", "preregister one formal or diagnostic cycle"),
+            ("freeze", "freeze commit, config, data slice, output, and repeat policy"),
+            ("checkpoint", "record cheap progress during a long active run"),
+            ("observe", "append post-run observations separately from interpretation"),
+            ("artifact", "register an existing evidence artifact"),
+            ("close", "close the cycle with evidence, limitations, and one next question"),
+        ),
+    ),
+    (
+        "Project lifecycle",
+        (
+            ("init", "bootstrap a project control plane non-destructively"),
+            ("stage", "change stage and canonical baseline at a cycle boundary"),
+            ("schedule/task", "evaluate or close advisory cross-cycle tasks"),
+            ("claim", "register or supersede an evidence-linked claim"),
+            ("reconcile", "repair explicit legacy lifecycle state"),
+            ("relocate", "relocate paths without rewriting append-only history"),
+        ),
+    ),
+)
 
 
 def print_help() -> None:
-    commands = " ".join(sorted(SCRIPT_COMMANDS | {name: "" for name in QUERY_COMMANDS}))
-    print(
-        "Research Experiment Loop\n\n"
-        "Usage: researchctl.py <command> [args]\n\n"
-        f"Commands: {commands}\n\n"
-        "The project root defaults to the current directory. Use '<command> --help' for details."
+    lines = [
+        "Research Experiment Loop",
+        "",
+        "Usage: researchctl <command> [args]",
+        "       researchctl help <command>",
+        "",
+    ]
+    for title, commands in COMMAND_GROUPS:
+        lines.append(f"{title}:")
+        lines.extend(f"  {name:<18} {description}" for name, description in commands)
+        lines.append("")
+    lines.extend(
+        (
+            "Typical cycle:",
+            "  status -> new -> freeze -> checkpoint/observe/artifact -> close -> schedule",
+            "",
+            "The project root defaults to the current directory. Project AGENTS.md takes precedence.",
+        )
     )
+    print("\n".join(lines))
 
 
 def with_default_root(args: list[str]) -> list[str]:
@@ -335,11 +381,7 @@ def next_command(argv: list[str]) -> int:
     return 0
 
 
-def main() -> int:
-    if len(sys.argv) < 2 or sys.argv[1] in {"-h", "--help", "help"}:
-        print_help()
-        return 0
-    command, args = sys.argv[1], sys.argv[2:]
+def dispatch(command: str, args: list[str]) -> int:
     if command in SCRIPT_COMMANDS:
         return run_script(SCRIPT_COMMANDS[command], args)
     if command == "list":
@@ -351,6 +393,18 @@ def main() -> int:
     if command == "next":
         return next_command(args)
     raise SystemExit(f"Unknown command: {command}. Run researchctl.py --help.")
+
+
+def main() -> int:
+    if len(sys.argv) < 2 or sys.argv[1] in {"-h", "--help"}:
+        print_help()
+        return 0
+    if sys.argv[1] == "help":
+        if len(sys.argv) == 2:
+            print_help()
+            return 0
+        return dispatch(sys.argv[2], ["--help"])
+    return dispatch(sys.argv[1], sys.argv[2:])
 
 
 if __name__ == "__main__":

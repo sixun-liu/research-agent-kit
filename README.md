@@ -24,6 +24,70 @@ cd research-agent-kit
 
 依赖为 Python 3、Git 和 PyYAML。已有目标若不是本仓库的软链接，安装器会拒绝覆盖。
 
+## 一分钟开始
+
+进入已经初始化的研究项目后，先运行：
+
+```bash
+researchctl status
+researchctl audit --strict
+researchctl next
+```
+
+- `status`：恢复 stage、baseline、active experiment、review 和 scheduler 状态；
+- `audit --strict`：检查 registry、路径、Git commit 和生命周期闭环；
+- `next`：只给出当前控制面的下一动作，不自动启动实验。
+
+项目级 `AGENTS.md`、禁用输入和评测协议始终高于通用 skill。
+
+## 日常实验循环
+
+```text
+status
+  -> new             预注册问题、假说、替代解释、指标和停止条件
+  -> freeze          冻结 commit、expanded config、数据、output、seed/repeat
+  -> checkpoint      长任务中记录低负担进展，可重复
+  -> observe         运行后分开记录观察与解释
+  -> artifact        登记真实图、表、dump 或机器结果
+  -> close           写裁决、限制和唯一下一问题
+  -> schedule        评估是否需要反思、理论同步、实践同步或人工看图
+```
+
+每个命令的参数使用统一帮助入口查询：
+
+```bash
+researchctl --help
+researchctl help new
+researchctl help freeze
+researchctl help close
+```
+
+诊断性实验可从低负担模板开始：
+
+```bash
+researchctl new \
+  --template probe \
+  --title "检查候选信号是否产生预期动作" \
+  --hypothesis-family signal-action \
+  --work-mode practice
+```
+
+`probe/oracle/instrumentation` 只能形成诊断证据，不能直接 `promote`。正式论文结论使用
+`formal`，并显式填写问题、变量、控制、主指标、替代解释和停止条件。
+
+## 查询历史
+
+```bash
+researchctl list experiments --limit 10
+researchctl list artifacts --experiment-id EXP-0001
+researchctl show EXP-0001
+researchctl show EXP-0001 --full
+researchctl find "mapping ghost"
+```
+
+`PLAN/TODO/CURRENT_STATE` 是人工控制入口；`project_state.yaml` 和 JSONL registry 是机器真源。
+不要手工维护重复的实验索引。
+
 ## 项目迁移
 
 研究项目应把工具、控制面、算法代码和大数据分开管理：
