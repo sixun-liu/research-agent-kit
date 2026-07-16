@@ -58,6 +58,16 @@ scoreboard 和 DEVLOG，并把 TODO 收敛为唯一下一问题。PLAN 只在主
 只有同类整理动作重复出现后才编写自动清理脚本；自动化必须默认 dry-run，不能按文件名猜测
 实验产物是否可删。
 
+## 设备迁移
+
+- 可复用工具、项目控制面和 canonical runtime repo 分别做 Git 管理。
+- dataset、checkpoint、output、dump 和完整 figure 树不进入控制面 Git。
+- 只在实验周期边界迁移。先 checkout 控制面记录的 canonical commit，再从新控制面根目录运行
+  `researchctl relocate --repo <new-canonical-repo>`。
+- `relocate` 只更新可变当前路径并登记旧根目录映射，不重写 append-only experiment、artifact、
+  claim、insight 或 task 历史。
+- 迁移后必须跑 strict audit；artifact 没有复制或挂载到映射位置时，缺失仍然是错误。
+
 ## ID 与 JSONL
 
 - Experiment：`EXP-####`

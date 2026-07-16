@@ -23,6 +23,7 @@ from research_state_lib import (
     latest_experiment_state,
     latest_task_state,
     load_yaml,
+    resolve_recorded_path,
 )
 
 
@@ -271,7 +272,7 @@ def main() -> int:
         if confirmation not in VALID_CONFIRMATIONS:
             errors.append(f"{experiment_id}: invalid human_visual_confirmation {confirmation!r}")
         review = record.get("human_review_path")
-        if review and not Path(str(review)).exists():
+        if review and not resolve_recorded_path(root, str(review), state).exists():
             errors.append(f"{experiment_id}: missing human review path {review}")
         if latest.get("status") == "complete" and not latest.get("verdict"):
             errors.append(f"{experiment_id}: complete experiment lacks verdict")
@@ -349,7 +350,11 @@ def main() -> int:
         if experiment_id and experiment_id not in experiments:
             errors.append(f"{artifact.get('id')}: unknown experiment_id {experiment_id}")
         path_value = artifact.get("path")
-        if artifact.get("exists_at_registration") and path_value and not Path(str(path_value)).exists():
+        if (
+            artifact.get("exists_at_registration")
+            and path_value
+            and not resolve_recorded_path(root, str(path_value), state).exists()
+        ):
             errors.append(f"{artifact.get('id')}: registered artifact missing: {path_value}")
         if (
             int(artifact.get("schema_version", 1)) >= 2
@@ -468,7 +473,7 @@ def main() -> int:
             if source_id not in ids:
                 errors.append(f"{task_id}: unknown source id {source_id}")
         discussion_path = task.get("discussion_path")
-        if discussion_path and not Path(str(discussion_path)).exists():
+        if discussion_path and not resolve_recorded_path(root, str(discussion_path), state).exists():
             errors.append(f"{task_id}: missing discussion card {discussion_path}")
     for event in task_events:
         task_id = str(event.get("task_id") or "")
@@ -538,7 +543,10 @@ def main() -> int:
 
     repo_value = state.get("canonical_repo", {}).get("path") if isinstance(state.get("canonical_repo"), dict) else None
     if repo_value:
-        repo = Path(str(repo_value))
+        repo = Path(str(repo_value)).expanduser()
+        if not repo.is_absolute():
+            repo = root / repo
+        repo = repo.resolve()
         code, commit = git(repo, "rev-parse", "HEAD")
         if code:
             errors.append(f"canonical repo is not a Git repository: {repo}")

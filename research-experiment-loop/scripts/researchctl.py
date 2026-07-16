@@ -34,6 +34,7 @@ SCRIPT_COMMANDS = {
     "schedule": "evaluate_research_scheduler.py",
     "task": "complete_research_task.py",
     "reconcile": "reconcile_experiment.py",
+    "relocate": "relocate_project.py",
 }
 QUERY_COMMANDS = {"list", "show", "find", "next"}
 

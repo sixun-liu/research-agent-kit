@@ -218,7 +218,8 @@ def canonical_repo(root: Path, state: dict[str, Any] | None = None) -> Path:
     value = state.get("canonical_repo", {})
     if not isinstance(value, dict) or not value.get("path"):
         raise SystemExit("project_state.yaml lacks canonical_repo.path")
-    return Path(str(value["path"])).resolve()
+    path = Path(str(value["path"])).expanduser()
+    return path.resolve() if path.is_absolute() else (root / path).resolve()
 
 
 def update_project_state(root: Path, **changes: Any) -> dict[str, Any]:
@@ -240,3 +241,62 @@ def sha256_file(path: Path) -> str:
 
 def resolve_project_path(root: Path, value: Path) -> Path:
     return value.resolve() if value.is_absolute() else (root / value).resolve()
+
+
+def configured_path_aliases(root: Path, state: dict[str, Any]) -> list[tuple[Path, Path]]:
+    workspace = state.get("workspace", {})
+    if not isinstance(workspace, dict):
+        return []
+    aliases: list[tuple[Path, Path]] = []
+    history = workspace.get("historical_roots", [])
+    if isinstance(history, list):
+        for value in history:
+            source = Path(str(value)).expanduser()
+            if source.is_absolute():
+                pair = (source.resolve(), root.resolve())
+                if pair not in aliases:
+                    aliases.append(pair)
+    values = workspace.get("path_aliases", [])
+    if not isinstance(values, list):
+        values = []
+    for value in values:
+        if not isinstance(value, dict) or not value.get("from") or not value.get("to"):
+            continue
+        source = Path(str(value["from"])).expanduser()
+        target = Path(str(value["to"])).expanduser()
+        if not source.is_absolute():
+            continue
+        if not target.is_absolute():
+            target = root / target
+        pair = (source.resolve(), target.resolve())
+        if pair not in aliases:
+            aliases.append(pair)
+    aliases.sort(key=lambda pair: len(pair[0].parts), reverse=True)
+    return aliases
+
+
+def apply_path_aliases(root: Path, path: Path, state: dict[str, Any]) -> Path:
+    current = path.expanduser().resolve()
+    aliases = configured_path_aliases(root, state)
+    for _ in range(len(aliases) + 1):
+        replacement: Path | None = None
+        for source, target in aliases:
+            try:
+                relative = current.relative_to(source)
+            except ValueError:
+                continue
+            replacement = (target / relative).resolve()
+            break
+        if replacement is None or replacement == current:
+            return current
+        current = replacement
+    raise SystemExit(f"Path alias cycle detected while resolving {path}")
+
+
+def resolve_recorded_path(root: Path, value: str | Path, state: dict[str, Any]) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = root / path
+    if path.exists():
+        return path.resolve()
+    return apply_path_aliases(root, path, state)

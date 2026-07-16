@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -944,6 +945,75 @@ class ResearchLifecycleTest(unittest.TestCase):
         self.assertTrue(json.loads(audit.stdout)["ok"])
         status = self.run_script("researchctl.py", "status", "--root", str(self.root), "--json")
         self.assertNotIn("EXP-9001", json.loads(status.stdout)["orphan_open_experiments"])
+
+    def test_relocate_preserves_historical_paths_through_aliases(self) -> None:
+        self.initialize()
+        artifact = self.root / "review.png"
+        artifact.write_bytes(b"portable-artifact")
+        artifact_id = "ART-0001"
+        with (self.root / "research" / "artifacts.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(
+                    {
+                        "record_type": "artifact",
+                        "schema_version": 1,
+                        "id": artifact_id,
+                        "experiment_id": None,
+                        "created_at": "2026-01-01T00:00:00Z",
+                        "kind": "review",
+                        "title": "Portable review",
+                        "path": str(artifact),
+                        "exists_at_registration": True,
+                        "provenance_quality": "historical_only",
+                    },
+                    separators=(",", ":"),
+                )
+                + "\n"
+            )
+
+        relocated_root = Path(tempfile.mkdtemp(prefix="research-relocated-"))
+        self.addCleanup(shutil.rmtree, relocated_root, True)
+        shutil.copytree(self.root, relocated_root, dirs_exist_ok=True)
+        artifact.unlink()
+
+        relocated = self.run_script(
+            "researchctl.py",
+            "relocate",
+            "--root",
+            str(relocated_root),
+            "--repo",
+            str(relocated_root),
+            "--json",
+        )
+        value = json.loads(relocated.stdout)
+        self.assertEqual(value["canonical_repo"]["path"], ".")
+        self.assertEqual(value["historical_root_registered"], str(self.root))
+        self.assertEqual(value["path_aliases_added"], [])
+
+        state = yaml.safe_load(
+            (relocated_root / "research" / "project_state.yaml").read_text(encoding="utf-8")
+        )
+        self.assertIn(str(self.root), state["workspace"]["historical_roots"])
+        self.assertEqual(state["canonical_repo"]["path"], ".")
+        rows = [
+            json.loads(line)
+            for line in (relocated_root / "research" / "artifacts.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        stored = next(row for row in rows if row.get("id") == artifact_id)
+        self.assertEqual(stored["path"], str(artifact))
+        self.assertFalse(artifact.exists())
+        self.assertTrue((relocated_root / "review.png").exists())
+
+        audit = self.run_script(
+            "audit_research_state.py",
+            "--root",
+            str(relocated_root),
+            "--strict",
+            "--json",
+        )
+        self.assertTrue(json.loads(audit.stdout)["ok"])
 
 
 if __name__ == "__main__":
