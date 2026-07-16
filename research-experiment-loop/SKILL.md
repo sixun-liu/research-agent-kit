@@ -10,13 +10,15 @@ Use this skill to turn exploratory research into small, auditable experiment cyc
 ## Start Here
 
 1. Read the nearest `AGENTS.md` and existing project control docs first.
-2. Run `scripts/audit_research_state.py --root <project>` when a `research/` registry exists.
+2. Run `scripts/research_status.py --root <project>` for a compact recovery view, then run
+   `scripts/audit_research_state.py --root <project>` when a `research/` registry exists.
 3. If no registry exists, run `scripts/init_research_state.py`; supply the north star, primary problem,
    canonical baseline, evaluation protocol, and at least one stage-exit gate.
 4. Use `scripts/set_project_stage.py` only at an experiment boundary. Keep one canonical baseline, one
    primary problem, and one active candidate; park unrelated lanes explicitly.
 5. Create one falsifiable experiment with `scripts/new_experiment.py` before changing runtime code or
-   launching compute.
+   launching compute. Use `--template probe|oracle|instrumentation` for diagnostic-only work; only
+   `formal` cycles may be promoted.
 
 Project instructions always override this generic workflow.
 
@@ -48,6 +50,8 @@ If the experiment cannot distinguish at least two explanations, redesign it befo
 - Bind dump, analysis, and online validation to one tracked code state.
 - Record expanded config, data slice, seed/repetition policy, output path, and forbidden priors.
 - If source changes, commit or otherwise fingerprint it before regenerating evidence.
+- Diagnostic templates inherit completion signals and project forbidden inputs. Formal cycles still
+  require explicit seed and repetition policy.
 
 ### 4. Use The Evidence Ladder
 
@@ -98,6 +102,10 @@ synchronization, synthesis, efficiency review, or human review. Use `--enqueue` 
 the reasons; queued tasks never launch experiments or modify method code. Complete them with
 `scripts/complete_research_task.py`.
 
+For a long active run, append a cheap `scripts/record_checkpoint.py` event at a meaningful boundary.
+The scheduler may then detect wall/compute stagnation before closure. A checkpoint never stops the
+process or authorizes a scientific verdict.
+
 ## Use Subagents Deliberately
 
 Subagents may act as read-only scout, blind visual observer, mechanism red-team, provenance auditor, or synthesis reviewer. Give each a narrow question and immutable inputs. The main agent retains code changes, evidence merging, and final scientific judgment.
@@ -114,10 +122,12 @@ Subagents may act as read-only scout, blind visual observer, mechanism red-team,
 - `scripts/set_project_stage.py`: freeze the current stage, primary problem, baseline, and exit gates.
 - `scripts/new_experiment.py`: experiment registration and card generation.
 - `scripts/freeze_experiment.py`: result-blind provenance freeze.
+- `scripts/record_checkpoint.py`: low-friction active-run progress and compute accounting.
 - `scripts/record_observation.py`: post-run data-walk observations.
 - `scripts/register_artifact.py`: artifact provenance registration.
 - `scripts/register_claim.py`: evidence-linked claim registration or supersession.
 - `scripts/close_experiment.py`: closure event and active-state cleanup.
 - `scripts/evaluate_research_scheduler.py`: read-only interrupt evaluation and explicit advisory enqueue.
 - `scripts/complete_research_task.py`: advisory task closure with artifact/insight links.
+- `scripts/research_status.py`: read-only compact project, experiment, review, task, and scheduler view.
 - `scripts/audit_research_state.py`: schema, references, paths, and Git audit.

@@ -41,11 +41,24 @@ VALID_TASK_ACTIONS = {
     "HUMAN_REVIEW",
     "EFFICIENCY_REVIEW",
 }
-TERMINAL_TASK_STATUSES = {"complete", "cancelled"}
+TERMINAL_TASK_STATUSES = {"complete", "cancelled", "waived", "merged"}
+VALID_TASK_EVENT_STATUSES = TERMINAL_TASK_STATUSES | {"deferred"}
 
 
 def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def parse_utc(value: str) -> dt.datetime:
+    parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def elapsed_hours(start: str, end: str | None = None) -> float:
+    end_value = parse_utc(end) if end else dt.datetime.now(dt.timezone.utc)
+    return max(0.0, (end_value - parse_utc(start)).total_seconds() / 3600.0)
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -146,7 +159,14 @@ def latest_task_state(task: dict[str, Any], events: list[dict[str, Any]]) -> dic
     for event in events:
         if event.get("task_id") != task.get("id"):
             continue
-        for key in ("status", "result", "artifact_ids", "insight_ids"):
+        for key in (
+            "status",
+            "result",
+            "artifact_ids",
+            "insight_ids",
+            "resume_condition",
+            "merge_into",
+        ):
             if event.get(key) is not None:
                 value[key] = event[key]
         value["updated_at"] = event.get("created_at", value.get("updated_at"))

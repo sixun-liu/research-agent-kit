@@ -7,6 +7,8 @@
 - 当前阶段：`{{stage}}`
 - 当前主要矛盾：`{{primary_problem}}`
 - Canonical baseline：`{{baseline_id}}`
+- 模板：`{{cycle_class}}`
+- 证据权限：`{{evidence_authority}}`
 - 假说族：`{{hypothesis_family}}`
 - 工作模式：`{{work_mode}}`
 - 唯一变量：`{{independent_variable}}`

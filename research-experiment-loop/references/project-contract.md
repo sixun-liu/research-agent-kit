@@ -77,6 +77,11 @@ Schema v3 增加跨循环调度：实验预注册记录 `hypothesis_family/work_
 `progress_type/failure_axis/wall_hours/compute_hours`；`scheduler.yaml` 保存项目阈值，
 `tasks.jsonl` 保存 advisory task。调度器默认只读，显式 `--enqueue` 也不得自动启动实验。
 
+实验可附带 `cycle_class=formal|probe|oracle|instrumentation`。后三类自动补全通用控制项，证据
+权限是 diagnostic/debug-only，不能 `promote`。长任务使用 `checkpoint` event 追加进展和
+compute delta；结案默认从 checkpoint 汇总 compute，并从预注册时间计算 wall time。调度任务
+可 `deferred`、`waived` 或 `merged`，但必须记录原因，deferred 还必须记录恢复条件。
+
 ## Human Review
 
 `LATEST.md` 指向当前最需要人判断的实验。只有真实图生成后才创建 `LATEST.png`，禁止放

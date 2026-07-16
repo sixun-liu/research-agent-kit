@@ -13,6 +13,7 @@ from research_state_lib import (
     VALID_DECISIONS,
     VALID_PROGRESS_TYPES,
     append_jsonl,
+    elapsed_hours,
     experiment_records,
     latest_experiment_state,
     load_jsonl,
@@ -38,59 +39,123 @@ def main() -> int:
     parser.add_argument("--artifact-id", action="append", default=[])
     parser.add_argument("--next", required=True)
     parser.add_argument("--progress-type", choices=sorted(VALID_PROGRESS_TYPES), required=True)
-    parser.add_argument("--progress-note", required=True)
+    parser.add_argument("--progress-note")
     parser.add_argument("--failure-axis")
-    parser.add_argument("--wall-hours", type=float, required=True)
-    parser.add_argument("--compute-hours", type=float, required=True)
+    parser.add_argument("--wall-hours", type=float)
+    parser.add_argument("--compute-hours", type=float)
     parser.add_argument("--theory-output")
     parser.add_argument("--practice-output")
-    parser.add_argument("--action-status", choices=("occurred", "absent", "not_applicable"), required=True)
+    parser.add_argument("--action-status", choices=("occurred", "absent", "not_applicable"))
     parser.add_argument(
-        "--completion-status", choices=("confirmed", "failed", "not_applicable"), required=True
+        "--completion-status", choices=("confirmed", "failed", "not_applicable")
     )
-    parser.add_argument("--human-confirmation", choices=sorted(VALID_CONFIRMATIONS), required=True)
-    parser.add_argument("--scoreboard-status", choices=CHECKLIST_VALUES, required=True)
-    parser.add_argument("--claim-status", choices=CHECKLIST_VALUES, required=True)
+    parser.add_argument("--human-confirmation", choices=sorted(VALID_CONFIRMATIONS))
+    parser.add_argument("--scoreboard-status", choices=CHECKLIST_VALUES)
+    parser.add_argument("--claim-status", choices=CHECKLIST_VALUES)
     args = parser.parse_args()
 
     if not args.observation:
         raise SystemExit("At least one --observation is required")
-    if not args.limitation:
-        raise SystemExit("At least one --limitation is required")
-    if args.wall_hours < 0 or args.compute_hours < 0:
+    if args.wall_hours is not None and args.wall_hours < 0:
+        raise SystemExit("--wall-hours must be non-negative")
+    if args.compute_hours is not None and args.compute_hours < 0:
         raise SystemExit("--wall-hours and --compute-hours must be non-negative")
     if args.decision == "negative" and not args.failure_axis:
         raise SystemExit("A negative decision requires --failure-axis")
-    if args.decision == "promote" and "pending" in (args.scoreboard_status, args.claim_status):
-        raise SystemExit("A promoted experiment cannot close with pending scoreboard or claim status")
-    if args.decision == "promote" and args.action_status != "occurred":
-        raise SystemExit("A promoted experiment must confirm that the expected action occurred")
-    if args.decision == "promote" and args.completion_status != "confirmed":
-        raise SystemExit("A promoted experiment must confirm its completion signals")
-    if args.action_status == "absent" and args.decision not in {"inconclusive", "invalid_provenance"}:
-        raise SystemExit("An absent expected action cannot support a positive or negative method verdict")
-    if args.completion_status == "failed" and args.decision not in {"inconclusive", "invalid_provenance"}:
-        raise SystemExit("Failed completion signals require inconclusive or invalid_provenance")
 
     root = args.root.resolve()
     experiment_id = resolve_experiment_id(root, args.experiment_id)
     experiments, events = experiment_records(root)
-    latest = latest_experiment_state(experiments[experiment_id], events)
+    experiment = experiments[experiment_id]
+    latest = latest_experiment_state(experiment, events)
     if latest.get("status") in TERMINAL_EXPERIMENT_STATUSES:
         raise SystemExit(f"Experiment is already terminal: {experiment_id}")
-    if int(experiments[experiment_id].get("schema_version", 1)) >= 2 and not any(
+    if int(experiment.get("schema_version", 1)) >= 2 and not any(
         event.get("event_type") == "provenance_freeze"
         for event in events
         if event.get("experiment_id") == experiment_id
     ):
         raise SystemExit("A v2 experiment must be frozen before closure")
-    work_mode = experiments[experiment_id].get("work_mode")
-    if work_mode == "theory" and not args.theory_output:
-        raise SystemExit("A theory cycle must record --theory-output")
-    if work_mode in {"practice", "instrumentation"} and not args.practice_output:
-        raise SystemExit(f"A {work_mode} cycle must record --practice-output")
-    if work_mode == "mixed" and (not args.theory_output or not args.practice_output):
-        raise SystemExit("A mixed cycle must record both --theory-output and --practice-output")
+    cycle_class = str(experiment.get("cycle_class") or "formal")
+    if args.decision == "promote" and not experiment.get("formal_claim_eligible", True):
+        raise SystemExit(f"A {cycle_class} cycle is diagnostic-only and cannot be promoted")
+    if cycle_class == "formal" and any(
+        value is None
+        for value in (args.human_confirmation, args.scoreboard_status, args.claim_status)
+    ):
+        raise SystemExit(
+            "A formal experiment requires --human-confirmation, --scoreboard-status, and --claim-status"
+        )
+    limitations = list(args.limitation)
+    if not limitations:
+        default_limitations = {
+            "probe": "Diagnostic probe; insufficient for a formal performance claim.",
+            "oracle": "Debug-only oracle evidence; forbidden from runtime or headline claims.",
+            "instrumentation": "Instrumentation result; method efficacy was not evaluated.",
+        }
+        default_limitation = default_limitations.get(cycle_class)
+        if not default_limitation:
+            raise SystemExit("At least one --limitation is required for a formal experiment")
+        limitations = [default_limitation]
+
+    experiment_events = [
+        event for event in events if event.get("experiment_id") == experiment_id
+    ]
+    checkpoints = sorted(
+        [event for event in experiment_events if event.get("event_type") == "checkpoint"],
+        key=lambda value: str(value.get("created_at", "")),
+    )
+    last_checkpoint = checkpoints[-1] if checkpoints else {}
+    action_status = args.action_status or last_checkpoint.get("expected_action_status")
+    completion_status = args.completion_status or last_checkpoint.get("completion_signal_status")
+    if action_status not in {"occurred", "absent", "not_applicable"}:
+        raise SystemExit("Resolve --action-status explicitly or in the latest checkpoint")
+    if completion_status not in {"confirmed", "failed", "not_applicable"}:
+        raise SystemExit("Resolve --completion-status explicitly or in the latest checkpoint")
+    if args.decision == "promote" and action_status != "occurred":
+        raise SystemExit("A promoted experiment must confirm that the expected action occurred")
+    if args.decision == "promote" and completion_status != "confirmed":
+        raise SystemExit("A promoted experiment must confirm its completion signals")
+    if action_status == "absent" and args.decision not in {
+        "inconclusive",
+        "invalid_provenance",
+    }:
+        raise SystemExit("An absent expected action cannot support a positive or negative method verdict")
+    if completion_status == "failed" and args.decision not in {
+        "inconclusive",
+        "invalid_provenance",
+    }:
+        raise SystemExit("Failed completion signals require inconclusive or invalid_provenance")
+    checkpoint_compute = sum(
+        float(event.get("compute_hours_delta") or 0.0)
+        for event in experiment_events
+        if event.get("event_type") == "checkpoint"
+    )
+    wall_hours = (
+        args.wall_hours
+        if args.wall_hours is not None
+        else elapsed_hours(str(experiment.get("created_at")))
+    )
+    compute_hours = args.compute_hours if args.compute_hours is not None else checkpoint_compute
+    progress_note = args.progress_note or args.interpretation
+    work_mode = experiment.get("work_mode")
+    theory_output = args.theory_output or (
+        args.interpretation if work_mode in {"theory", "mixed"} else None
+    )
+    practice_output = args.practice_output or (
+        " ".join(args.observation) if work_mode in {"practice", "instrumentation", "mixed"} else None
+    )
+    if work_mode == "theory" and not theory_output:
+        raise SystemExit("A theory cycle must record a theory output")
+    if work_mode in {"practice", "instrumentation"} and not practice_output:
+        raise SystemExit(f"A {work_mode} cycle must record a practice output")
+    if work_mode == "mixed" and (not theory_output or not practice_output):
+        raise SystemExit("A mixed cycle must record both theory and practice outputs")
+    human_confirmation = args.human_confirmation or "not_required"
+    scoreboard_status = args.scoreboard_status or "not_required"
+    claim_status = args.claim_status or "not_required"
+    if args.decision == "promote" and "pending" in (scoreboard_status, claim_status):
+        raise SystemExit("A promoted experiment cannot close with pending scoreboard or claim status")
 
     artifacts = {
         str(record.get("id"))
@@ -104,36 +169,41 @@ def main() -> int:
         raise SystemExit("A promoted experiment must register at least one artifact")
 
     registry = root / "research" / "experiments.jsonl"
+    closed_at = utc_now()
     event = {
         "record_type": "experiment_event",
         "schema_version": 2,
         "id": next_id(registry, "EVT"),
         "experiment_id": experiment_id,
-        "created_at": utc_now(),
+        "created_at": closed_at,
         "event_type": "closure",
         "status": "complete",
         "verdict": args.verdict,
         "decision": args.decision,
         "observations": args.observation,
         "interpretation": args.interpretation,
-        "limitations": args.limitation,
+        "limitations": limitations,
         "artifacts": args.artifact_id,
         "next": args.next,
         "progress_type": args.progress_type,
-        "progress_note": args.progress_note,
+        "progress_note": progress_note,
         "failure_axis": args.failure_axis,
-        "wall_hours": args.wall_hours,
-        "compute_hours": args.compute_hours,
-        "theory_output": args.theory_output,
-        "practice_output": args.practice_output,
-        "expected_action_status": args.action_status,
-        "completion_signal_status": args.completion_status,
-        "human_visual_confirmation": args.human_confirmation,
+        "wall_hours": wall_hours,
+        "compute_hours": compute_hours,
+        "time_accounting": {
+            "wall": "explicit" if args.wall_hours is not None else "elapsed_from_preregistration",
+            "compute": "explicit" if args.compute_hours is not None else "checkpoint_sum",
+        },
+        "theory_output": theory_output,
+        "practice_output": practice_output,
+        "expected_action_status": action_status,
+        "completion_signal_status": completion_status,
+        "human_visual_confirmation": human_confirmation,
         "closure_checklist": {
-            "scoreboard": args.scoreboard_status,
-            "claim_registry": args.claim_status,
+            "scoreboard": scoreboard_status,
+            "claim_registry": claim_status,
             "artifacts_registered": bool(args.artifact_id),
-            "human_review": args.human_confirmation,
+            "human_review": human_confirmation,
         },
     }
     append_jsonl(registry, event)
@@ -146,14 +216,14 @@ def main() -> int:
                 f"- Verdict：`{args.verdict}`\n"
                 f"- Decision：`{args.decision}`\n"
                 f"- 解释：{args.interpretation}\n"
-                f"- 预期动作：`{args.action_status}`；完成信号：`{args.completion_status}`\n"
-                f"- 进展：`{args.progress_type}`，{args.progress_note}\n"
-                f"- 耗时：wall `{args.wall_hours:.3f}h`；compute `{args.compute_hours:.3f}h`\n"
+                f"- 预期动作：`{action_status}`；完成信号：`{completion_status}`\n"
+                f"- 进展：`{args.progress_type}`，{progress_note}\n"
+                f"- 耗时：wall `{wall_hours:.3f}h`；compute `{compute_hours:.3f}h`\n"
                 f"- 观察：{'；'.join(args.observation)}\n"
-                f"- 限制：{'；'.join(args.limitation)}\n"
+                f"- 限制：{'；'.join(limitations)}\n"
                 f"- 下一步：{args.next}\n"
-                f"- 人工确认：`{args.human_confirmation}`\n"
-                f"- Scoreboard：`{args.scoreboard_status}`；Claim registry：`{args.claim_status}`\n"
+                f"- 人工确认：`{human_confirmation}`\n"
+                f"- Scoreboard：`{scoreboard_status}`；Claim registry：`{claim_status}`\n"
             )
 
     update_project_state(root, active_experiment_id=None)

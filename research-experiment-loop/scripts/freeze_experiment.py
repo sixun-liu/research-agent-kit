@@ -30,8 +30,8 @@ def main() -> int:
     parser.add_argument("--expanded-config", type=Path, required=True)
     parser.add_argument("--data-slice", required=True)
     parser.add_argument("--output-path", type=Path, required=True)
-    parser.add_argument("--seed-policy", required=True)
-    parser.add_argument("--repeat-policy", required=True)
+    parser.add_argument("--seed-policy")
+    parser.add_argument("--repeat-policy")
     parser.add_argument("--forbidden-input", action="append", default=[])
     parser.add_argument("--completion-signal", action="append", default=[])
     parser.add_argument("--command")
@@ -40,7 +40,8 @@ def main() -> int:
     root = args.root.resolve()
     experiment_id = resolve_experiment_id(root, args.experiment_id)
     experiments, events = experiment_records(root)
-    if latest_experiment_state(experiments[experiment_id], events).get("status") in {
+    experiment = experiments[experiment_id]
+    if latest_experiment_state(experiment, events).get("status") in {
         "complete",
         "archived",
         "blocked",
@@ -50,12 +51,24 @@ def main() -> int:
     output_path = resolve_project_path(root, args.output_path)
     if not config.is_file():
         raise SystemExit(f"Expanded config does not exist: {config}")
-    if not args.completion_signal:
-        raise SystemExit("At least one --completion-signal is required")
     if output_path.exists():
         raise SystemExit(f"Refusing to freeze onto an existing output path: {output_path}")
 
+    cycle_class = str(experiment.get("cycle_class") or "formal")
+    seed_policy = args.seed_policy
+    repeat_policy = args.repeat_policy
+    if cycle_class == "formal" and (not seed_policy or not repeat_policy):
+        raise SystemExit("A formal experiment requires --seed-policy and --repeat-policy")
+    seed_policy = seed_policy or "deterministic or not applicable"
+    repeat_policy = repeat_policy or "one discriminating diagnostic probe"
+    completion_signals = args.completion_signal or list(experiment.get("completion_signals") or [])
+    if not completion_signals:
+        raise SystemExit("At least one completion signal is required in the card or freeze command")
+
     state = load_yaml(root / "research" / "project_state.yaml")
+    profile_path = root / "research" / "profile.yaml"
+    profile = load_yaml(profile_path) if profile_path.exists() else {}
+    forbidden_inputs = args.forbidden_input or list(profile.get("forbidden_inputs") or [])
     snapshot = git_snapshot(canonical_repo(root, state))
     if not snapshot["tracked_clean"]:
         raise SystemExit("Refusing to freeze provenance with tracked Git changes")
@@ -80,11 +93,11 @@ def main() -> int:
             "data_slice": args.data_slice,
             "output_path": str(output_path),
             "output_exists_at_freeze": output_path.exists(),
-            "seed_policy": args.seed_policy,
-            "repeat_policy": args.repeat_policy,
-            "forbidden_inputs": args.forbidden_input,
+            "seed_policy": seed_policy,
+            "repeat_policy": repeat_policy,
+            "forbidden_inputs": forbidden_inputs,
             "command": args.command,
-            "completion_signals": args.completion_signal,
+            "completion_signals": completion_signals,
         },
     }
     append_jsonl(registry, event)

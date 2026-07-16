@@ -14,6 +14,7 @@ from research_state_lib import (
     TERMINAL_TASK_STATUSES,
     VALID_TASK_ACTIONS,
     append_jsonl,
+    elapsed_hours,
     experiment_records,
     latest_experiment_state,
     latest_task_state,
@@ -156,7 +157,12 @@ def main() -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
 
-    thresholds = config.get("thresholds", {})
+    project_state = load_yaml(root / "research" / "project_state.yaml")
+    stage = str(project_state.get("stage") or "unknown")
+    thresholds = dict(config.get("thresholds", {}))
+    stage_thresholds = config.get("stage_thresholds", {})
+    if isinstance(stage_thresholds, dict) and isinstance(stage_thresholds.get(stage), dict):
+        thresholds.update(stage_thresholds[stage])
     priorities = config.get("priorities", {})
     experiments, events = experiment_records(root)
     closures = sorted(
@@ -185,7 +191,7 @@ def main() -> int:
 
     recommendations: dict[str, dict[str, Any]] = {}
 
-    active_id = load_yaml(root / "research" / "project_state.yaml").get("active_experiment_id")
+    active_id = project_state.get("active_experiment_id")
     if active_id:
         active_events = [event for event in events if event.get("experiment_id") == active_id]
         has_freeze = any(event.get("event_type") == "provenance_freeze" for event in active_events)
@@ -197,6 +203,57 @@ def main() -> int:
                 f"{active_id} 已产生结果观察但没有 provenance freeze。",
                 [str(active_id)],
                 priorities,
+            )
+        checkpoints = sorted(
+            [event for event in active_events if event.get("event_type") == "checkpoint"],
+            key=lambda value: str(value.get("created_at", "")),
+        )
+        absent_actions = [
+            event for event in checkpoints if event.get("expected_action_status") == "absent"
+        ]
+        if absent_actions:
+            add_recommendation(
+                recommendations,
+                "INTEGRITY",
+                f"{active_id} checkpoint 已确认预期动作缺失；停止形成方法结论并检查 plumbing。",
+                [str(event.get("id")) for event in absent_actions],
+                priorities,
+            )
+        active_experiment = experiments.get(str(active_id), {})
+        anchor = str(active_experiment.get("created_at") or utc_now())
+        last_progress = next(
+            (
+                event
+                for event in reversed(checkpoints)
+                if event.get("progress_type") not in {None, "none"}
+            ),
+            None,
+        )
+        if last_progress:
+            anchor = str(last_progress.get("created_at") or anchor)
+        trailing_checkpoints = [
+            event for event in checkpoints if str(event.get("created_at") or "") > anchor
+        ]
+        if not last_progress:
+            trailing_checkpoints = checkpoints
+        active_wall = elapsed_hours(anchor)
+        active_compute = sum(
+            float(event.get("compute_hours_delta") or 0.0) for event in trailing_checkpoints
+        )
+        active_stalled = (
+            active_wall >= float(thresholds.get("active_no_progress_wall_hours", 2.0))
+            or active_compute >= float(thresholds.get("active_no_progress_compute_hours", 1.5))
+        )
+        if active_stalled:
+            source_ids = [str(event.get("id")) for event in trailing_checkpoints] or [str(active_id)]
+            reason = (
+                f"活动实验 {active_id} 自最近实质进展后 wall={active_wall:.2f}h、"
+                f"compute={active_compute:.2f}h。"
+            )
+            add_recommendation(recommendations, "REFLECT", reason, source_ids, priorities)
+            add_recommendation(recommendations, "INTUITION", reason, source_ids, priorities)
+            add_recommendation(
+                recommendations, "EFFICIENCY_REVIEW", reason, source_ids, priorities
             )
 
     for event in closures:
@@ -352,6 +409,8 @@ def main() -> int:
     result = {
         "root": str(root),
         "mode": config.get("mode", "advisory"),
+        "stage": stage,
+        "effective_thresholds": thresholds,
         "closed_experiments": len(closures),
         "open_task_actions": sorted(value for value in open_actions if value),
         "recommendations": ordered,

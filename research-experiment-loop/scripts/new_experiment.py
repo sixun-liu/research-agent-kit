@@ -30,19 +30,31 @@ def require_list(name: str, values: list[str]) -> None:
         raise SystemExit(f"At least one --{name} is required")
 
 
+def require_value(name: str, value: str | None) -> str:
+    if not value:
+        raise SystemExit(f"--{name} is required")
+    return value
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
+    parser.add_argument(
+        "--template",
+        choices=("formal", "probe", "oracle", "instrumentation"),
+        default="formal",
+        help="Use a strict formal card or a low-friction diagnostic template",
+    )
     parser.add_argument("--title", required=True)
     parser.add_argument("--slug")
-    parser.add_argument("--question", required=True)
-    parser.add_argument("--hypothesis", required=True)
+    parser.add_argument("--question")
+    parser.add_argument("--hypothesis")
     parser.add_argument("--primary-problem")
     parser.add_argument("--baseline-id")
     parser.add_argument("--hypothesis-family", required=True)
-    parser.add_argument("--work-mode", choices=("theory", "practice", "mixed", "instrumentation"), required=True)
-    parser.add_argument("--independent-variable", required=True)
-    parser.add_argument("--expected-action", required=True)
+    parser.add_argument("--work-mode", choices=("theory", "practice", "mixed", "instrumentation"))
+    parser.add_argument("--independent-variable")
+    parser.add_argument("--expected-action")
     parser.add_argument("--completion-signal", action="append", default=[])
     parser.add_argument("--claim-id", action="append", default=[])
     parser.add_argument("--lane", choices=("planned", "breakthrough_followup"), default="planned")
@@ -65,11 +77,48 @@ def main() -> int:
         raise SystemExit(
             f"Active experiment {state['active_experiment_id']} must be closed or blocked before creating another"
         )
-    require_list("alternative", args.alternative)
-    require_list("control", args.control)
-    require_list("metric", args.metric)
-    require_list("stop-condition", args.stop_condition)
-    require_list("completion-signal", args.completion_signal)
+    question = require_value("question", args.question)
+    hypothesis = require_value("hypothesis", args.hypothesis)
+    work_mode = args.work_mode or (
+        "instrumentation" if args.template == "instrumentation" else "practice"
+    )
+    if args.template == "formal":
+        independent_variable = require_value("independent-variable", args.independent_variable)
+        expected_action = require_value("expected-action", args.expected_action)
+        require_list("alternative", args.alternative)
+        require_list("control", args.control)
+        require_list("metric", args.metric)
+        require_list("stop-condition", args.stop_condition)
+        require_list("completion-signal", args.completion_signal)
+        alternatives = args.alternative
+        controls = args.control
+        metrics = args.metric
+        stop_conditions = args.stop_condition
+        completion_signals = args.completion_signal
+        evidence_authority = "formal_candidate"
+        formal_claim_eligible = True
+    else:
+        independent_variable = args.independent_variable or (
+            "The diagnostic intervention named in the hypothesis versus the frozen baseline."
+        )
+        expected_action = args.expected_action or (
+            "The declared diagnostic observable changes in the predicted direction."
+        )
+        alternatives = args.alternative or [
+            "The effect is caused by instrumentation, alignment, or run variance."
+        ]
+        controls = args.control or [
+            "Canonical baseline, data slice, seed policy, and consumer remain frozen."
+        ]
+        metrics = args.metric or [f"Diagnostic observable for: {question}"]
+        stop_conditions = args.stop_condition or [
+            "Stop if provenance, expected action, or the completion signal is absent."
+        ]
+        completion_signals = args.completion_signal or [
+            "The declared diagnostic artifact or metric exists."
+        ]
+        evidence_authority = "debug_only" if args.template == "oracle" else "diagnostic_only"
+        formal_claim_eligible = False
 
     experiment_id = next_id(registry, "EXP")
     now = utc_now()
@@ -115,18 +164,21 @@ def main() -> int:
         "stage": state.get("stage"),
         "primary_problem": primary_problem,
         "baseline_id": baseline_id,
+        "cycle_class": args.template,
+        "evidence_authority": evidence_authority,
+        "formal_claim_eligible": formal_claim_eligible,
         "hypothesis_family": args.hypothesis_family,
-        "work_mode": args.work_mode,
-        "question": args.question,
-        "hypothesis": args.hypothesis,
-        "independent_variable": args.independent_variable,
-        "expected_action": args.expected_action,
-        "completion_signals": args.completion_signal,
+        "work_mode": work_mode,
+        "question": question,
+        "hypothesis": hypothesis,
+        "independent_variable": independent_variable,
+        "expected_action": expected_action,
+        "completion_signals": completion_signals,
         "claim_ids": args.claim_id,
-        "alternatives": args.alternative,
-        "controls": args.control,
-        "primary_metrics": args.metric,
-        "stop_conditions": args.stop_condition,
+        "alternatives": alternatives,
+        "controls": controls,
+        "primary_metrics": metrics,
+        "stop_conditions": stop_conditions,
         "evidence_plan": {"numerical": [], "spatial": [], "temporal": [], "causal": []},
         "provenance": {
             "analysis_repo": snapshot["repo"],
@@ -141,10 +193,10 @@ def main() -> int:
     }
 
     card_path.parent.mkdir(parents=True, exist_ok=True)
-    alternatives = "\n".join(f"- {item}" for item in args.alternative) or "- 待补充"
-    controls = "\n".join(f"- {item}" for item in args.control) or "- 待补充"
-    metrics = "\n".join(f"- {item}" for item in args.metric) or "- 待补充"
-    stops = "\n".join(f"- {item}" for item in args.stop_condition) or "- 待补充"
+    alternatives_text = "\n".join(f"- {item}" for item in alternatives)
+    controls_text = "\n".join(f"- {item}" for item in controls)
+    metrics_text = "\n".join(f"- {item}" for item in metrics)
+    stops_text = "\n".join(f"- {item}" for item in stop_conditions)
     card_path.write_text(
         f"""# {experiment_id}：{args.title}
 
@@ -152,33 +204,34 @@ def main() -> int:
 
 ## 一句话问题
 
-{args.question}
+{question}
 
 ## 阶段与基座
 
 - 阶段：`{state.get('stage')}`
 - 当前主要矛盾：{primary_problem or '待补充'}
 - Canonical baseline：`{baseline_id or 'unassigned'}`
-- 假说族：`{args.hypothesis_family}`；工作模式：`{args.work_mode}`
-- 唯一变量：{args.independent_variable}
-- 预期动作：{args.expected_action}
-- 完成正向信号：{'；'.join(args.completion_signal)}
+- 模板：`{args.template}`；证据权限：`{evidence_authority}`
+- 假说族：`{args.hypothesis_family}`；工作模式：`{work_mode}`
+- 唯一变量：{independent_variable}
+- 预期动作：{expected_action}
+- 完成正向信号：{'；'.join(completion_signals)}
 
 ## 假说
 
-{args.hypothesis}
+{hypothesis}
 
 ## 替代解释
 
-{alternatives}
+{alternatives_text}
 
 ## 控制项
 
-{controls}
+{controls_text}
 
 ## 主指标
 
-{metrics}
+{metrics_text}
 
 ## 证据四联
 
@@ -189,7 +242,7 @@ def main() -> int:
 
 ## 停止条件
 
-{stops}
+{stops_text}
 
 ## 人工审查
 

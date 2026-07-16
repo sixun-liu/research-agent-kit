@@ -12,11 +12,13 @@ from pathlib import Path
 from research_state_lib import (
     REGISTRIES,
     TERMINAL_EXPERIMENT_STATUSES,
+    TERMINAL_TASK_STATUSES,
     VALID_CONFIRMATIONS,
     VALID_DECISIONS,
     VALID_PROGRESS_TYPES,
     VALID_STAGES,
     VALID_TASK_ACTIONS,
+    VALID_TASK_EVENT_STATUSES,
     VALID_WORK_MODES,
     latest_experiment_state,
     latest_task_state,
@@ -118,10 +120,16 @@ def audit_v3_project(research: Path, errors: list[str]) -> None:
                     "cycles_without_synthesis",
                     "pending_human_reviews",
                 }
+                optional = {
+                    "active_no_progress_wall_hours",
+                    "active_no_progress_compute_hours",
+                }
                 missing = sorted(required - thresholds.keys())
                 if missing:
                     errors.append(f"research/scheduler.yaml lacks thresholds: {', '.join(missing)}")
                 for name, value in thresholds.items():
+                    if name not in required | optional:
+                        errors.append(f"research/scheduler.yaml unknown threshold: {name}")
                     if not isinstance(value, (int, float)) or value < 0:
                         errors.append(f"research/scheduler.yaml invalid threshold {name}: {value!r}")
                 for name in (
@@ -134,6 +142,39 @@ def audit_v3_project(research: Path, errors: list[str]) -> None:
                 ):
                     if isinstance(thresholds.get(name), (int, float)) and thresholds[name] < 1:
                         errors.append(f"research/scheduler.yaml threshold {name} must be >= 1")
+            stage_thresholds = scheduler.get("stage_thresholds", {})
+            if not isinstance(stage_thresholds, dict):
+                errors.append("research/scheduler.yaml stage_thresholds must be a mapping")
+            else:
+                valid_names = required | optional if isinstance(thresholds, dict) else set()
+                for stage, overrides in stage_thresholds.items():
+                    if stage not in VALID_STAGES:
+                        errors.append(f"research/scheduler.yaml invalid stage override: {stage}")
+                    if not isinstance(overrides, dict):
+                        errors.append(
+                            f"research/scheduler.yaml stage override {stage} must be a mapping"
+                        )
+                        continue
+                    for name, value in overrides.items():
+                        if name not in valid_names:
+                            errors.append(
+                                f"research/scheduler.yaml unknown threshold override: {stage}.{name}"
+                            )
+                        if not isinstance(value, (int, float)) or value < 0:
+                            errors.append(
+                                f"research/scheduler.yaml invalid override {stage}.{name}: {value!r}"
+                            )
+                        if name in {
+                            "valid_negative_streak",
+                            "no_progress_cycles",
+                            "theory_only_streak",
+                            "practice_only_streak",
+                            "cycles_without_synthesis",
+                            "pending_human_reviews",
+                        } and isinstance(value, (int, float)) and value < 1:
+                            errors.append(
+                                f"research/scheduler.yaml override {stage}.{name} must be >= 1"
+                            )
             priorities = scheduler.get("priorities")
             if not isinstance(priorities, dict):
                 errors.append("research/scheduler.yaml lacks priorities mapping")
@@ -274,6 +315,18 @@ def main() -> int:
                 errors.append(f"{experiment_id}: v3 experiment lacks hypothesis_family")
             if record.get("work_mode") not in VALID_WORK_MODES:
                 errors.append(f"{experiment_id}: invalid work_mode {record.get('work_mode')!r}")
+            cycle_class = record.get("cycle_class")
+            if cycle_class is not None and cycle_class not in {
+                "formal",
+                "probe",
+                "oracle",
+                "instrumentation",
+            }:
+                errors.append(f"{experiment_id}: invalid cycle_class {cycle_class!r}")
+            if cycle_class in {"probe", "oracle", "instrumentation"} and record.get(
+                "formal_claim_eligible"
+            ):
+                errors.append(f"{experiment_id}: diagnostic cycle cannot be formal_claim_eligible")
 
     if active_id:
         latest_active = latest_experiment_state(experiments[active_id], events_by_experiment[active_id])
@@ -356,6 +409,28 @@ def main() -> int:
                     or not str(event.get("practice_output") or "").strip()
                 ):
                     errors.append(f"{event.get('id')}: mixed closure lacks theory/practice outputs")
+        if event.get("event_type") == "checkpoint":
+            if not str(event.get("note") or "").strip():
+                errors.append(f"{event.get('id')}: checkpoint lacks note")
+            if event.get("progress_type") not in VALID_PROGRESS_TYPES:
+                errors.append(f"{event.get('id')}: invalid checkpoint progress_type")
+            compute_delta = event.get("compute_hours_delta")
+            if not isinstance(compute_delta, (int, float)) or compute_delta < 0:
+                errors.append(f"{event.get('id')}: invalid checkpoint compute_hours_delta")
+            if event.get("expected_action_status") not in {
+                "pending",
+                "occurred",
+                "absent",
+                "not_applicable",
+            }:
+                errors.append(f"{event.get('id')}: invalid checkpoint expected_action_status")
+            if event.get("completion_signal_status") not in {
+                "pending",
+                "confirmed",
+                "failed",
+                "not_applicable",
+            }:
+                errors.append(f"{event.get('id')}: invalid checkpoint completion_signal_status")
 
     task_rows: list[dict] = []
     tasks_path = research / "tasks.jsonl"
@@ -401,10 +476,18 @@ def main() -> int:
             errors.append(f"{event.get('id')}: unknown task_id {task_id!r}")
             continue
         task_events_by_id[task_id].append(event)
-        if event.get("status") not in {"complete", "cancelled"}:
+        if event.get("status") not in VALID_TASK_EVENT_STATUSES:
             errors.append(f"{event.get('id')}: invalid task event status {event.get('status')!r}")
         if not str(event.get("result") or "").strip():
             errors.append(f"{event.get('id')}: task event lacks result")
+        if event.get("status") == "deferred" and not str(
+            event.get("resume_condition") or ""
+        ).strip():
+            errors.append(f"{event.get('id')}: deferred task lacks resume_condition")
+        if event.get("status") == "merged":
+            merge_into = str(event.get("merge_into") or "")
+            if merge_into not in tasks or merge_into == task_id:
+                errors.append(f"{event.get('id')}: invalid merge target {merge_into!r}")
         if not isinstance(event.get("closed_experiment_count"), int) or event.get(
             "closed_experiment_count"
         ) < 0:
@@ -416,7 +499,7 @@ def main() -> int:
     open_actions: dict[str, list[str]] = defaultdict(list)
     for task_id, task in tasks.items():
         latest = latest_task_state(task, task_events_by_id[task_id])
-        if latest.get("status") not in {"complete", "cancelled"}:
+        if latest.get("status") not in TERMINAL_TASK_STATUSES:
             open_actions[str(task.get("action_type"))].append(task_id)
     for action_type, task_ids in open_actions.items():
         if len(task_ids) > 1:

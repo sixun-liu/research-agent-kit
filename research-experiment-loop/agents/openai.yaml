@@ -1,4 +1,4 @@
 interface:
   display_name: "Research Experiment Loop"
-  short_description: "Converge reproducible research with adaptive interrupts"
-  default_prompt: "Use $research-experiment-loop to run an auditable research cycle and evaluate cross-cycle interrupts when progress stalls."
+  short_description: "Run reproducible research with low-friction interrupts"
+  default_prompt: "Use $research-experiment-loop to recover project status, choose a diagnostic or formal cycle, and run auditable research with adaptive interrupts."

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Complete or cancel an advisory research scheduler task."""
+"""Resolve, defer, waive, or merge an advisory research scheduler task."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pathlib import Path
 
 from research_state_lib import (
     TERMINAL_TASK_STATUSES,
+    VALID_TASK_EVENT_STATUSES,
     append_jsonl,
     experiment_records,
     latest_task_state,
@@ -24,11 +25,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--task-id", required=True)
-    parser.add_argument("--status", choices=("complete", "cancelled"), required=True)
+    parser.add_argument("--status", choices=sorted(VALID_TASK_EVENT_STATUSES), required=True)
     parser.add_argument("--result", required=True)
     parser.add_argument("--artifact-id", action="append", default=[])
     parser.add_argument("--insight-id", action="append", default=[])
     parser.add_argument("--next")
+    parser.add_argument("--resume-condition")
+    parser.add_argument("--merge-into")
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -38,6 +41,16 @@ def main() -> int:
     latest = latest_task_state(tasks[args.task_id], events)
     if latest.get("status") in TERMINAL_TASK_STATUSES:
         raise SystemExit(f"Task is already terminal: {args.task_id}")
+    if args.status == "deferred" and not args.resume_condition:
+        raise SystemExit("A deferred task requires --resume-condition")
+    if args.status == "merged":
+        if not args.merge_into:
+            raise SystemExit("A merged task requires --merge-into")
+        if args.merge_into == args.task_id or args.merge_into not in tasks:
+            raise SystemExit(f"Invalid merge target: {args.merge_into}")
+        target = latest_task_state(tasks[args.merge_into], events)
+        if target.get("status") in TERMINAL_TASK_STATUSES:
+            raise SystemExit(f"Merge target is terminal: {args.merge_into}")
 
     research = root / "research"
     known_artifacts = {
@@ -73,6 +86,8 @@ def main() -> int:
         "artifact_ids": args.artifact_id,
         "insight_ids": args.insight_id,
         "next": args.next,
+        "resume_condition": args.resume_condition,
+        "merge_into": args.merge_into,
         "closed_experiment_count": closed_count,
     }
     append_jsonl(registry, event)
@@ -89,6 +104,8 @@ def main() -> int:
                 f"- 状态：`{args.status}`\n"
                 f"- 结果：{args.result}\n"
                 f"- 下一步：{args.next or 'none'}\n"
+                f"- 恢复条件：{args.resume_condition or 'none'}\n"
+                f"- 合并到：`{args.merge_into or 'none'}`\n"
             )
     print(json.dumps(event, ensure_ascii=False, indent=2))
     return 0

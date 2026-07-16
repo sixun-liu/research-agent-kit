@@ -56,6 +56,10 @@
 还要记录 baseline ID、唯一变量、预期中间动作和完成正向信号。预期动作没有发生时，结果不能
 解释成方法正负证据。
 
+小型机制诊断使用 `probe`，外部理想参考使用 `oracle`，仪器自检使用 `instrumentation`。
+三者自动标为 diagnostic/debug-only，不能直接 `promote`；若发现值得主张的效果，另建
+`formal` 卡并重新冻结正式口径，不把诊断卡改名升格。
+
 ### D. 证据梯度
 
 先复用已有 dump。离线统计能回答就不跑 tracking；tracking 能判负就不跑 mapping；
@@ -105,3 +109,5 @@
 5. 判断继续、转向或停止。
 
 不要让长队列替代推理。出现两次同类负结果时先回到离线诊断，不继续扩大参数网格。
+单次运行较长时，在机制边界或固定 compute chunk 后写一条 checkpoint；只记录新增 compute、
+是否有实质进展和动作状态。状态未变化时不写长篇日志，运行 `research_status.py` 即可恢复现场。

@@ -26,13 +26,16 @@
   `route_closed` 进展。
 - 理论/实践 streak 来自实验预注册的 `work_mode`，不是根据标题猜测。
 - wall/compute 时间由结案显式记录；不同项目在 `scheduler.yaml` 设置预算，不在 skill 中写死。
+- 活动实验的 checkpoint 可在结案前触发 wall/compute 停滞；`stage_thresholds` 可覆盖当前阶段
+  的预算，不改变 evidence gate。
 
 ## 操作方式
 
 1. 每次实验结案后运行 `evaluate_research_scheduler.py --root <project>`，只读查看建议。
 2. 人或主 agent 确认触发合理后，增加 `--enqueue` 将建议写入 `tasks.jsonl` 和 discussion card。
 3. 处理器可以使用子 agent，但必须给出窄问题、只读输入和固定输出契约。
-4. 用 `complete_research_task.py` 结案任务；任务结果可以引用 artifact/insight。
+4. 用 `complete_research_task.py` 完成、暂缓、豁免或合并任务；暂缓必须写恢复条件，任务结果
+   可以引用 artifact/insight。
 5. 调度器发现同类 task 仍 queued 时不重复入队。
 
 ## 创造性护栏

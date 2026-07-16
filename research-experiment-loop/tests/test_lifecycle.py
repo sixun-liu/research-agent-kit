@@ -526,6 +526,44 @@ class ResearchLifecycleTest(unittest.TestCase):
             for record in tasks
             if record.get("record_type") == "research_task" and record.get("action_type") == "REFLECT"
         )
+        intuition_id = next(
+            record["id"]
+            for record in tasks
+            if record.get("record_type") == "research_task"
+            and record.get("action_type") == "INTUITION"
+        )
+        efficiency_id = next(
+            record["id"]
+            for record in tasks
+            if record.get("record_type") == "research_task"
+            and record.get("action_type") == "EFFICIENCY_REVIEW"
+        )
+        self.run_script(
+            "complete_research_task.py",
+            "--root",
+            str(self.root),
+            "--task-id",
+            intuition_id,
+            "--status",
+            "deferred",
+            "--result",
+            "Wait for the frozen replay artifact before leaving the local search region.",
+            "--resume-condition",
+            "The replay artifact is registered.",
+        )
+        self.run_script(
+            "complete_research_task.py",
+            "--root",
+            str(self.root),
+            "--task-id",
+            efficiency_id,
+            "--status",
+            "merged",
+            "--result",
+            "The same first-divergence audit resolves both reflection and cost questions.",
+            "--merge-into",
+            reflect_id,
+        )
         self.run_script(
             "complete_research_task.py",
             "--root",
@@ -539,6 +577,135 @@ class ResearchLifecycleTest(unittest.TestCase):
             "--next",
             "Design one offline first-divergence audit.",
         )
+        audit = self.run_script(
+            "audit_research_state.py", "--root", str(self.root), "--strict", "--json"
+        )
+        self.assertTrue(json.loads(audit.stdout)["ok"])
+
+        status = self.run_script("research_status.py", "--root", str(self.root), "--json")
+        open_tasks = {value["id"]: value for value in json.loads(status.stdout)["open_tasks"]}
+        self.assertEqual(open_tasks[intuition_id]["status"], "deferred")
+        self.assertNotIn(efficiency_id, open_tasks)
+
+    def test_low_friction_probe_checkpoint_status_and_close(self) -> None:
+        self.initialize()
+        scheduler_path = self.root / "research" / "scheduler.yaml"
+        scheduler = yaml.safe_load(scheduler_path.read_text(encoding="utf-8"))
+        scheduler["stage_thresholds"] = {
+            "attack": {
+                "active_no_progress_wall_hours": 99.0,
+                "active_no_progress_compute_hours": 0.2,
+            }
+        }
+        scheduler_path.write_text(yaml.safe_dump(scheduler, sort_keys=False), encoding="utf-8")
+
+        created = self.run_script(
+            "new_experiment.py",
+            "--root",
+            str(self.root),
+            "--template",
+            "probe",
+            "--title",
+            "Cheap alignment probe",
+            "--question",
+            "Does the saved alignment explain the first divergence?",
+            "--hypothesis",
+            "A frozen replay will localize the divergence before the consumer.",
+            "--hypothesis-family",
+            "alignment-probe",
+        )
+        experiment_id = json.loads(created.stdout)["id"]
+        experiment_rows = [
+            json.loads(line)
+            for line in (self.root / "research" / "experiments.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        experiment = next(record for record in experiment_rows if record.get("id") == experiment_id)
+        self.assertEqual(experiment["cycle_class"], "probe")
+        self.assertFalse(experiment["formal_claim_eligible"])
+        self.assertEqual(experiment["work_mode"], "practice")
+
+        config = self.root / "probe-expanded.yaml"
+        config.write_text("probe: fixed\n", encoding="utf-8")
+        self.run_script(
+            "freeze_experiment.py",
+            "--root",
+            str(self.root),
+            "--expanded-config",
+            config.name,
+            "--data-slice",
+            "saved state",
+            "--output-path",
+            "outputs/alignment-probe",
+        )
+        self.run_script(
+            "record_checkpoint.py",
+            "--root",
+            str(self.root),
+            "--note",
+            "Replay ran but did not reduce the active uncertainty.",
+            "--compute-hours-delta",
+            "0.25",
+            "--action-status",
+            "occurred",
+            "--completion-status",
+            "confirmed",
+        )
+
+        status = self.run_script("research_status.py", "--root", str(self.root), "--json")
+        status_value = json.loads(status.stdout)
+        self.assertEqual(status_value["active_experiment"]["checkpoint_count"], 1)
+        self.assertEqual(status_value["active_experiment"]["compute_hours_recorded"], 0.25)
+        actions = {value["action_type"] for value in status_value["recommendations"]}
+        self.assertTrue({"REFLECT", "INTUITION", "EFFICIENCY_REVIEW"}.issubset(actions))
+
+        rejected_promotion = self.run_script(
+            "close_experiment.py",
+            "--root",
+            str(self.root),
+            "--verdict",
+            "invalid-probe-promotion",
+            "--decision",
+            "promote",
+            "--observation",
+            "The probe produced a useful diagnostic result.",
+            "--interpretation",
+            "Diagnostic evidence must be rerun as a formal cycle.",
+            "--next",
+            "Open a formal experiment if the mechanism remains promising.",
+            "--progress-type",
+            "uncertainty_reduction",
+            "--scoreboard-status",
+            "updated",
+            "--claim-status",
+            "updated",
+            check=False,
+        )
+        self.assertNotEqual(rejected_promotion.returncode, 0)
+        self.assertIn("diagnostic-only", rejected_promotion.stderr)
+
+        closed = self.run_script(
+            "close_experiment.py",
+            "--root",
+            str(self.root),
+            "--verdict",
+            "probe-reduces-one-alternative",
+            "--decision",
+            "needs_more_evidence",
+            "--observation",
+            "The replay ruled out a post-consumer divergence.",
+            "--interpretation",
+            "The next probe should inspect temporal alignment before the consumer.",
+            "--next",
+            "Run one first-divergence audit on the saved state.",
+            "--progress-type",
+            "uncertainty_reduction",
+        )
+        closure = json.loads(closed.stdout)
+        self.assertEqual(closure["compute_hours"], 0.25)
+        self.assertEqual(closure["closure_checklist"]["scoreboard"], "not_required")
+        self.assertIn("Diagnostic probe", closure["limitations"][0])
         audit = self.run_script(
             "audit_research_state.py", "--root", str(self.root), "--strict", "--json"
         )
