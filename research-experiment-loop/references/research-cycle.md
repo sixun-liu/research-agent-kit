@@ -33,6 +33,8 @@
 核对 canonical repo 的 branch/commit/tracked dirty。只把有 fingerprint 的结果当正式证据。
 同时核对当前阶段、北极星、主要矛盾、canonical baseline ID、active candidate 和 parked lanes。
 方法昵称相同但 baseline ID 不同的结果只能作历史对照。
+机器状态由 `researchctl.py status` 恢复；`CURRENT_STATE.md` 只补充人工判断。PLAN 决定阶段意图，
+TODO 只选择近期动作，不能用其中的文字覆盖 registry 事实。
 
 ### B. 一句话问题
 
@@ -84,6 +86,8 @@
 
 分别写：事实、观察、解释、反证、裁决、下一项最小判别实验。完成的动作进 devlog，
 可引用结果才进 scoreboard，突破线索进 insights registry。
+只有形成可复用路线决策或机制结论时才追加 DEVLOG；TODO 删除已完成动作并保留唯一下一问题。
+PLAN 仅在主要矛盾、路线地位或阶段退出门变化时更新。
 
 每个 run 结束后做一次短数据散步：检查分布、最差段、异常空间模式和恢复行为，保存1-3条
 观察。结案时明确 artifact、人工审查、scoreboard 和 claim registry 是已更新、无需更新还是

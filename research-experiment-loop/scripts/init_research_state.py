@@ -150,6 +150,55 @@ human_review:
     ).read_text(encoding="utf-8")
     write_once(research / "scheduler.yaml", scheduler_template, created, skipped)
     (research / "cards").mkdir(parents=True, exist_ok=True)
+    exit_gates = "\n".join(f"- [ ] {value}" for value in args.stage_exit_gate)
+    write_once(
+        root / "CURRENT_STATE.md",
+        "# CURRENT_STATE\n\n"
+        "> 机器状态请运行 `researchctl.py status`；本文只保存人工综合。\n\n"
+        "## 一句话判断\n\n待综合。\n\n"
+        f"## 当前主要矛盾\n\n{args.primary_problem}\n\n"
+        "## 下一项决策\n\n建立首个可证伪实验。\n",
+        created,
+        skipped,
+    )
+    write_once(
+        root / "PLAN.md",
+        "# PLAN\n\n"
+        f"- 阶段：`{args.stage}`\n"
+        f"- 北极星：{args.north_star}\n"
+        f"- 当前主要矛盾：{args.primary_problem}\n\n"
+        "## 阶段退出门\n\n"
+        f"{exit_gates}\n\n"
+        "## 活动路线\n\n待建立。\n\n"
+        "## Parked Lanes\n\n暂无。\n",
+        created,
+        skipped,
+    )
+    write_once(
+        root / "TODO.md",
+        "# TODO\n\n"
+        "仅保留近期可执行项；实验事实和完成历史不堆在这里。\n\n"
+        "## Now\n\n- [ ] 建立首个可证伪实验。\n\n"
+        "## Waiting\n\n暂无。\n",
+        created,
+        skipped,
+    )
+    write_once(
+        root / "DEVLOG.md",
+        "# DEVLOG\n\n"
+        "只追加持久决策、路线升降级和机制结论；原始运行输出留在 registry/artifact。\n",
+        created,
+        skipped,
+    )
+    write_once(
+        root / "RESULTS_SCOREBOARD.md",
+        "# RESULTS_SCOREBOARD\n\n"
+        "只收录协议一致、可比较的 formal 结果；probe/oracle/instrumentation 不进入正式表。\n\n"
+        "| Experiment | Protocol | Primary | Tail | Mapping/Visual | Verdict |\n"
+        "|---|---|---:|---:|---|---|\n",
+        created,
+        skipped,
+    )
     write_once(
         review / "index.md",
         "# 人工审查入口\n\n尚无实验。只有生成真实图后才创建 `LATEST.png`。\n",

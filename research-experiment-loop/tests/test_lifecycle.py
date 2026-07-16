@@ -174,6 +174,22 @@ class ResearchLifecycleTest(unittest.TestCase):
 
     def test_full_lifecycle_and_strict_audit(self) -> None:
         self.initialize()
+        for filename in (
+            "CURRENT_STATE.md",
+            "PLAN.md",
+            "TODO.md",
+            "DEVLOG.md",
+            "RESULTS_SCOREBOARD.md",
+        ):
+            self.assertTrue((self.root / filename).is_file())
+        self.assertIn(
+            "机器状态请运行",
+            (self.root / "CURRENT_STATE.md").read_text(encoding="utf-8"),
+        )
+        todo_path = self.root / "TODO.md"
+        todo_path.write_text("# project-owned TODO\n", encoding="utf-8")
+        self.initialize()
+        self.assertEqual(todo_path.read_text(encoding="utf-8"), "# project-owned TODO\n")
         self.run_script("audit_research_state.py", "--root", str(self.root), "--strict")
         created = self.create_experiment()
         self.assertEqual(created["id"], "EXP-0001")
@@ -657,8 +673,32 @@ class ResearchLifecycleTest(unittest.TestCase):
         status_value = json.loads(status.stdout)
         self.assertEqual(status_value["active_experiment"]["checkpoint_count"], 1)
         self.assertEqual(status_value["active_experiment"]["compute_hours_recorded"], 0.25)
+        self.assertTrue(status_value["audit"]["strict_ok"])
+        self.assertEqual(status_value["next_action"]["action"], "observe_or_close")
         actions = {value["action_type"] for value in status_value["recommendations"]}
         self.assertTrue({"REFLECT", "INTUITION", "EFFICIENCY_REVIEW"}.issubset(actions))
+
+        listed = self.run_script(
+            "researchctl.py",
+            "list",
+            "experiments",
+            "--root",
+            str(self.root),
+            "--family",
+            "alignment-probe",
+            "--json",
+        )
+        listed_rows = json.loads(listed.stdout)
+        self.assertEqual([row["id"] for row in listed_rows], [experiment_id])
+        shown = self.run_script(
+            "researchctl.py", "show", experiment_id, "--root", str(self.root), "--json"
+        )
+        shown_value = json.loads(shown.stdout)
+        self.assertGreaterEqual(shown_value["event_count"], 2)
+        next_value = self.run_script(
+            "researchctl.py", "next", "--root", str(self.root), "--json"
+        )
+        self.assertEqual(json.loads(next_value.stdout)["action"], "observe_or_close")
 
         rejected_promotion = self.run_script(
             "close_experiment.py",

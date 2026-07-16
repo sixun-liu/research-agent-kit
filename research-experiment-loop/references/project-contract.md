@@ -28,6 +28,22 @@ project/
 
 项目已有目录优先，不强制搬迁大型产物。根目录控制文档应短，历史细节进入专题文档或归档。
 
+## 信息所有权
+
+| 入口 | 唯一职责 | 更新时机 | 不应保存 |
+|---|---|---|---|
+| `project_state.yaml` + JSONL | stage、baseline、实验/任务事件和 provenance 的机器真源 | 每个生命周期动作 | 人工长篇解释 |
+| `CURRENT_STATE.md` | 一句话判断、当前主要矛盾、下一项决策 | 综合或方向变化时 | stage/commit/active ID 等可查询字段 |
+| `PLAN.md` | 阶段目标、候选路线、退出门和 parked lanes | 阶段切换或 `SYNTHESIS` | 逐 run 日志和参数表 |
+| `TODO.md` | 近期 3-7 个可执行动作、等待条件 | 开卡、结案、任务 defer/complete | 完成历史和实验结论全文 |
+| `DEVLOG.md` | 持久决策、路线升降级、机制结论及证据 ID | 有可复用结论时 | stdout、逐帧数据和无裁决 brainstorm |
+| `RESULTS_SCOREBOARD.md` | 协议一致的 formal 数字、图和竞品比较 | 正式结果闭环时 | probe/oracle 数字和不可比历史线索 |
+| `discussion/` | 子 agent、红队和未收敛草稿 | 按需 | 正典 claim 和唯一状态 |
+
+一次正常循环中，TODO 选择问题并链接新 `EXP`；运行事实只进 event/artifact；结案后按需要更新
+scoreboard 和 DEVLOG，并把 TODO 收敛为唯一下一问题。PLAN 只在主要矛盾、路线地位或阶段退出门
+变化时更新。不要为了“同步”在每轮机械重写全部文档。
+
 ## Workspace hygiene
 
 目录整理属于 provenance，不是装饰。只在实验周期边界进行，并遵循：
@@ -54,6 +70,9 @@ project/
 
 JSONL 每行一个 object，第一行是 `registry_meta`。追加记录优于重写历史；更正记录用
 `supersedes` 指向旧 ID。记录值可以使用项目语言，schema key 保持英文。
+
+历史查询使用动态入口，不维护手写索引：`researchctl.py list`、`show` 和 `find`。静态 Markdown
+索引只适合稳定专题，不应用来复制 experiment/artifact/claim/task registry。
 
 ## Provenance
 

@@ -10,7 +10,7 @@ Use this skill to turn exploratory research into small, auditable experiment cyc
 ## Start Here
 
 1. Read the nearest `AGENTS.md` and existing project control docs first.
-2. Run `scripts/research_status.py --root <project>` for a compact recovery view, then run
+2. Run `scripts/researchctl.py status` from the project root for a compact recovery view, then run
    `scripts/audit_research_state.py --root <project>` when a `research/` registry exists.
 3. If no registry exists, run `scripts/init_research_state.py`; supply the north star, primary problem,
    canonical baseline, evaluation protocol, and at least one stage-exit gate.
@@ -119,6 +119,7 @@ Subagents may act as read-only scout, blind visual observer, mechanism red-team,
 - `references/research-scheduler.md`: cross-cycle triggers, priorities, task contracts, and creativity guardrails.
 - `references/method-patterns.md`: reusable Oracle, surgical, replay, fault-injection, canary, and control patterns.
 - `scripts/init_research_state.py`: non-destructive project bootstrap.
+- `scripts/researchctl.py`: unified command dispatcher plus dynamic list/show/find/next index.
 - `scripts/set_project_stage.py`: freeze the current stage, primary problem, baseline, and exit gates.
 - `scripts/new_experiment.py`: experiment registration and card generation.
 - `scripts/freeze_experiment.py`: result-blind provenance freeze.

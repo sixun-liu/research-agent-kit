@@ -1,29 +1,19 @@
 # 当前状态
 
-更新日期：`{{updated_at}}`
+> 机器状态请运行 `researchctl.py status`；本文只保存人工综合。
 
-## 一句话状态
+## 一句话判断
 
 `{{one_line_state}}`
 
-## 阶段控制
+## 当前主要矛盾
 
-- 当前阶段：`{{stage}}`
-- 北极星：`{{north_star}}`
-- 当前主要矛盾：`{{primary_problem}}`
-- Canonical baseline：`{{canonical_baseline_id}}`
-- Active candidate：`{{active_candidate}}`
-- 阶段退出门：`{{stage_exit_gates}}`
-- Scheduler 建议：`{{scheduler_recommendations}}`
-- Open research tasks：`{{open_research_tasks}}`
+`{{primary_problem}}`
 
-## 正典基座
+## 当前判断依据
 
-- 仓库：`{{canonical_repo}}`
-- 分支：`{{branch}}`
-- Commit：`{{commit}}`
-- Active experiment：`{{active_experiment_id}}`
+`{{current_evidence}}`
 
-## 当前动作
+## 下一项决策
 
 `{{current_action}}`
