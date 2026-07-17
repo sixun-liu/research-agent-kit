@@ -19,7 +19,15 @@ REGISTRIES = {
 }
 TERMINAL_EXPERIMENT_STATUSES = {"complete", "archived", "blocked"}
 VALID_CONFIRMATIONS = {"pending", "confirmed", "disagreed", "not_required"}
-VALID_STAGES = {"exploration", "attack", "convergence", "writing", "complete"}
+VALID_STAGES = {
+    "understanding",
+    "reproduction",
+    "exploration",
+    "attack",
+    "convergence",
+    "writing",
+    "complete",
+}
 VALID_DECISIONS = {
     "promote",
     "promising_unresolved",

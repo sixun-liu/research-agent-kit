@@ -25,10 +25,10 @@ def main() -> int:
     parser.add_argument("--north-star", required=True)
     parser.add_argument("--primary-problem", required=True)
     parser.add_argument("--active-candidate")
-    parser.add_argument("--baseline-id", required=True)
-    parser.add_argument("--baseline-name", required=True)
-    parser.add_argument("--baseline-config", required=True)
-    parser.add_argument("--evaluation-protocol", required=True)
+    parser.add_argument("--baseline-id")
+    parser.add_argument("--baseline-name")
+    parser.add_argument("--baseline-config")
+    parser.add_argument("--evaluation-protocol")
     parser.add_argument("--parked-lane", action="append", default=[])
     parser.add_argument("--stage-exit-gate", action="append", default=[])
     parser.add_argument("--domain")
@@ -48,6 +48,18 @@ def main() -> int:
         raise SystemExit("Refusing to change project stage while an experiment is active")
     if not args.stage_exit_gate:
         raise SystemExit("At least one --stage-exit-gate is required")
+    baseline_values = (
+        args.baseline_id,
+        args.baseline_name,
+        args.baseline_config,
+        args.evaluation_protocol,
+    )
+    if any(baseline_values) and not all(baseline_values):
+        raise SystemExit("Baseline arguments must be supplied together")
+    if args.stage != "understanding" and not all(baseline_values):
+        raise SystemExit(
+            "Entering reproduction or a later stage requires a freshly frozen canonical baseline"
+        )
 
     snapshot = git_snapshot(canonical_repo(root, state))
     if not snapshot["tracked_clean"]:
@@ -110,13 +122,15 @@ def main() -> int:
         ).read_text(encoding="utf-8")
         scheduler_path.write_text(scheduler_template, encoding="utf-8")
 
-    baseline = {
-        "id": args.baseline_id,
-        "name": args.baseline_name,
-        "repo_commit": snapshot["commit"],
-        "config": args.baseline_config,
-        "evaluation_protocol": args.evaluation_protocol,
-    }
+    baseline = state.get("canonical_baseline")
+    if all(baseline_values):
+        baseline = {
+            "id": args.baseline_id,
+            "name": args.baseline_name,
+            "repo_commit": snapshot["commit"],
+            "config": args.baseline_config,
+            "evaluation_protocol": args.evaluation_protocol,
+        }
     updated = update_project_state(
         root,
         schema_version=max(int(state.get("schema_version", 1)), 3),

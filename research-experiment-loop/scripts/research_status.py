@@ -67,6 +67,8 @@ def audit_status(root: Path) -> dict[str, Any]:
 
 
 def infer_next_action(
+    stage: str | None,
+    canonical_baseline_id: str | None,
     active: dict[str, Any] | None,
     audit: dict[str, Any],
     orphan_open_experiments: list[str],
@@ -129,6 +131,22 @@ def infer_next_action(
         return {
             "action": f"review_interrupt:{recommendation.get('action_type')}",
             "reason": "The read-only scheduler has an unqueued recommendation.",
+        }
+    if stage == "understanding":
+        return {
+            "action": "complete_paper_protocol_audit",
+            "reason": (
+                "Pin the paper version, claim-protocol matrix, code lineage, reference artifacts, and cost envelope before freezing a baseline."
+            ),
+        }
+    if stage == "reproduction":
+        return {
+            "action": "open_replication_cycle",
+            "reason": (
+                "The reproduction baseline is frozen; open the cheapest cycle that can reproduce one declared paper result."
+                if canonical_baseline_id
+                else "Freeze a canonical reproduction baseline before launching compute."
+            ),
         }
     return {
         "action": "open_next_cycle_or_synthesize",
@@ -232,7 +250,14 @@ def main() -> int:
     scheduler = scheduler_status(root)
     recommendations = scheduler.get("recommendations", [])
     audit = audit_status(root)
+    canonical_baseline_id = (
+        state.get("canonical_baseline", {}).get("id")
+        if isinstance(state.get("canonical_baseline"), dict)
+        else None
+    )
     next_action = infer_next_action(
+        state.get("stage"),
+        canonical_baseline_id,
         active,
         audit,
         orphan_open_experiments,
@@ -244,11 +269,7 @@ def main() -> int:
         "root": str(root),
         "stage": state.get("stage"),
         "primary_problem": state.get("primary_problem"),
-        "canonical_baseline_id": (
-            state.get("canonical_baseline", {}).get("id")
-            if isinstance(state.get("canonical_baseline"), dict)
-            else None
-        ),
+        "canonical_baseline_id": canonical_baseline_id,
         "active_experiment": active,
         "orphan_open_experiments": orphan_open_experiments,
         "open_tasks": open_tasks,

@@ -8,6 +8,35 @@
   证据四联、轻量诊断模板、长任务 checkpoint、跨循环中断调度、理论/实践平衡、数据散步、
   artifact/claim 注册、动态索引、机器审计和人工 review 入口；日常统一从 `researchctl.py` 进入。
 
+论文项目使用完整阶段：
+
+```text
+understanding -> reproduction -> exploration -> attack -> convergence -> writing
+```
+
+`understanding` 先固定论文版本、主张、代码谱系、协议和成本；`reproduction` 再用
+`replication` 卡复现一个明确图表或结果。通过 baseline 后才进入自由探索和方法消融。
+
+文献调研使用独立的轻量闭环：
+
+```text
+question/search plan -> source pool -> screening -> extraction -> synthesis -> claim promotion
+```
+
+协作者同步目录只是 staging inbox；稳定快照、来源索引和 hash manifest 进入项目
+`references/`。研读笔记属于 `internal_synthesis`，必须回到论文、代码或运行产物核验后才能
+晋升正式主张。详见 `research-experiment-loop/references/literature-workflow.md`。
+
+仓库治理使用独立契约：control/runtime/workflow/third-party/artifact store 分开，正式实验从
+tracked-clean commit 冻结，freeze 后不改写历史。分支、commit、run tag 和变量单位见
+`references/git-and-naming.md`，目录宽深、staging 和数据盘分层见 `references/workspace-layout.md`。
+Claude GPF 科研实现流程通过 `references/gpf-research-implementation-adapter.md` 单向适配，不引入
+第二套 project stage。
+
+工作流允许持续演进，但只在实验边界通过 proposal、测试、dogfood、版本发布和项目显式采用完成；
+active/frozen 实验不会自动升级。风险分级、SemVer、迁移和回滚规则见
+`references/workflow-evolution.md`。
+
 ## 安装
 
 ```bash
@@ -31,11 +60,13 @@ cd research-agent-kit
 ```bash
 researchctl status
 researchctl audit --strict
+researchctl hygiene --strict
 researchctl next
 ```
 
 - `status`：恢复 stage、baseline、active experiment、review 和 scheduler 状态；
 - `audit --strict`：检查 registry、路径、Git commit 和生命周期闭环；
+- `hygiene --strict`：检查 control repo 的 Git、命名、未跟踪源码、大文件、cache 和根目录布局；
 - `next`：只给出当前控制面的下一动作，不自动启动实验。
 
 项目级 `AGENTS.md`、禁用输入和评测协议始终高于通用 skill。
@@ -72,8 +103,8 @@ researchctl new \
   --work-mode practice
 ```
 
-`probe/oracle/instrumentation` 只能形成诊断证据，不能直接 `promote`。正式论文结论使用
-`formal`，并显式填写问题、变量、控制、主指标、替代解释和停止条件。
+`probe/oracle/instrumentation` 只能形成诊断证据，不能直接 `promote`。论文结果复现使用
+`replication`；新方法结论使用 `formal`，并显式填写问题、变量、控制、主指标、替代解释和停止条件。
 
 ## 查询历史
 

@@ -38,10 +38,10 @@ def main() -> int:
     parser.add_argument("--stage", choices=sorted(VALID_STAGES), default="exploration")
     parser.add_argument("--north-star", required=True)
     parser.add_argument("--primary-problem", required=True)
-    parser.add_argument("--baseline-id", required=True)
-    parser.add_argument("--baseline-name", required=True)
-    parser.add_argument("--baseline-config", required=True)
-    parser.add_argument("--evaluation-protocol", required=True)
+    parser.add_argument("--baseline-id")
+    parser.add_argument("--baseline-name")
+    parser.add_argument("--baseline-config")
+    parser.add_argument("--evaluation-protocol")
     parser.add_argument("--stage-exit-gate", action="append", default=[])
     parser.add_argument("--primary-metric", action="append", default=[])
     parser.add_argument("--tail-metric", action="append", default=[])
@@ -55,6 +55,18 @@ def main() -> int:
         raise SystemExit("At least one --primary-metric is required")
     if not args.promotion_gate:
         raise SystemExit("At least one --promotion-gate is required")
+    baseline_values = (
+        args.baseline_id,
+        args.baseline_name,
+        args.baseline_config,
+        args.evaluation_protocol,
+    )
+    if any(baseline_values) and not all(baseline_values):
+        raise SystemExit("Baseline arguments must be supplied together")
+    if args.stage != "understanding" and not all(baseline_values):
+        raise SystemExit(
+            "A canonical baseline is required after the understanding stage"
+        )
 
     root = args.root.resolve()
     repo = (args.repo or root).resolve()
@@ -72,6 +84,42 @@ def main() -> int:
 
     created: list[str] = []
     skipped: list[str] = []
+    template_root = Path(__file__).resolve().parents[1] / "assets" / "project-template"
+    write_once(
+        root / ".gitignore",
+        (template_root / "GITIGNORE").read_text(encoding="utf-8"),
+        created,
+        skipped,
+    )
+    for directory in (
+        root / "configs" / "baselines",
+        root / "configs" / "experiments",
+        root / "scripts" / "run",
+        root / "scripts" / "analyze",
+        root / "scripts" / "admin",
+        root / "tests",
+        root / "references" / "papers",
+        root / "references" / "implementations",
+        root / "references" / "understanding",
+        root / "references" / "surveys",
+        root / "references" / "manifests",
+        root / "discussion" / "claude",
+        root / "discussion" / "codex",
+        root / "discussion" / "archive",
+        root / "reports" / "daily",
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+    baseline = (
+        {
+            "id": args.baseline_id,
+            "name": args.baseline_name,
+            "repo_commit": commit,
+            "config": args.baseline_config,
+            "evaluation_protocol": args.evaluation_protocol,
+        }
+        if all(baseline_values)
+        else None
+    )
     state = f'''schema_version: 3
 project_id: {json.dumps(args.project_id)}
 updated_at: {json.dumps(now)}
@@ -81,12 +129,7 @@ north_star: {json.dumps(args.north_star)}
 primary_problem: {json.dumps(args.primary_problem)}
 active_experiment_id: null
 active_candidate: null
-canonical_baseline:
-  id: {json.dumps(args.baseline_id)}
-  name: {json.dumps(args.baseline_name)}
-  repo_commit: {json.dumps(commit)}
-  config: {json.dumps(args.baseline_config)}
-  evaluation_protocol: {json.dumps(args.evaluation_protocol)}
+canonical_baseline: {json.dumps(baseline, ensure_ascii=False)}
 parked_lanes: []
 stage_exit_gates: {json.dumps(args.stage_exit_gate, ensure_ascii=False)}
 canonical_repo:
@@ -115,6 +158,11 @@ human_review:
         "created_at": now,
         "id_prefix": "TASK",
     }
+    next_action = (
+        "完成论文版本、主张、代码谱系和评测协议对账。"
+        if args.stage == "understanding"
+        else "建立首个可证伪实验。"
+    )
     write_once(
         research / "tasks.jsonl",
         json.dumps(task_meta, ensure_ascii=False) + "\n",
@@ -125,6 +173,24 @@ human_review:
     write_once(
         research / "README.md",
         "# 机器可读研究状态\n\nJSONL 每行一个记录；实验开始前建卡，结束后写 verdict。\n",
+        created,
+        skipped,
+    )
+    write_once(
+        root / "references" / "INDEX.md",
+        "# Reference Index\n\n稳定论文、实现谱系、已核理解快照、调研综合和 ingestion manifest 的统一入口。\n",
+        created,
+        skipped,
+    )
+    write_once(
+        root / "discussion" / "INDEX.md",
+        "# Discussion Index\n\n未收敛协作笔记和红队草稿；正典事实仍以 references 与 research registry 为准。\n",
+        created,
+        skipped,
+    )
+    write_once(
+        root / "reports" / "daily" / "INDEX.md",
+        "# Daily Reports\n\n面向人的日报由 DEVLOG 和已登记证据生成；机器事实仍以 registry 为准。\n",
         created,
         skipped,
     )
@@ -145,9 +211,7 @@ human_review:
         created,
         skipped,
     )
-    scheduler_template = (
-        Path(__file__).resolve().parents[1] / "assets" / "project-template" / "SCHEDULER.yaml"
-    ).read_text(encoding="utf-8")
+    scheduler_template = (template_root / "SCHEDULER.yaml").read_text(encoding="utf-8")
     write_once(research / "scheduler.yaml", scheduler_template, created, skipped)
     (research / "cards").mkdir(parents=True, exist_ok=True)
     exit_gates = "\n".join(f"- [ ] {value}" for value in args.stage_exit_gate)
@@ -157,7 +221,7 @@ human_review:
         "> 机器状态请运行 `researchctl.py status`；本文只保存人工综合。\n\n"
         "## 一句话判断\n\n待综合。\n\n"
         f"## 当前主要矛盾\n\n{args.primary_problem}\n\n"
-        "## 下一项决策\n\n建立首个可证伪实验。\n",
+        f"## 下一项决策\n\n{next_action}\n",
         created,
         skipped,
     )
@@ -178,7 +242,7 @@ human_review:
         root / "TODO.md",
         "# TODO\n\n"
         "仅保留近期可执行项；实验事实和完成历史不堆在这里。\n\n"
-        "## Now\n\n- [ ] 建立首个可证伪实验。\n\n"
+        f"## Now\n\n- [ ] {next_action}\n\n"
         "## Waiting\n\n暂无。\n",
         created,
         skipped,

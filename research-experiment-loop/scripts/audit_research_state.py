@@ -59,8 +59,11 @@ def audit_v2_project(state: dict, research: Path, errors: list[str]) -> None:
     for field in ("north_star", "primary_problem"):
         if not str(state.get(field) or "").strip():
             errors.append(f"project_state.yaml lacks {field}")
+    stage = state.get("stage")
     baseline = state.get("canonical_baseline")
-    if not isinstance(baseline, dict):
+    if baseline is None and stage == "understanding":
+        pass
+    elif not isinstance(baseline, dict):
         errors.append("project_state.yaml lacks canonical_baseline mapping")
     else:
         for field in ("id", "name", "repo_commit", "config", "evaluation_protocol"):
@@ -319,6 +322,7 @@ def main() -> int:
             cycle_class = record.get("cycle_class")
             if cycle_class is not None and cycle_class not in {
                 "formal",
+                "replication",
                 "probe",
                 "oracle",
                 "instrumentation",
@@ -328,6 +332,21 @@ def main() -> int:
                 "formal_claim_eligible"
             ):
                 errors.append(f"{experiment_id}: diagnostic cycle cannot be formal_claim_eligible")
+            if cycle_class == "replication":
+                target = record.get("replication_target")
+                if not isinstance(target, dict):
+                    errors.append(f"{experiment_id}: replication cycle lacks replication_target")
+                else:
+                    for field in ("kind", "claim"):
+                        if not str(target.get(field) or "").strip():
+                            errors.append(
+                                f"{experiment_id}: replication_target lacks {field}"
+                            )
+                    for field in ("reference_artifacts", "protocol_matches"):
+                        if not nonempty_list(target.get(field)):
+                            errors.append(
+                                f"{experiment_id}: replication_target field {field} must be non-empty"
+                            )
 
     if active_id:
         latest_active = latest_experiment_state(experiments[active_id], events_by_experiment[active_id])

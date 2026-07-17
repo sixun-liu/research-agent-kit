@@ -176,13 +176,143 @@ class ResearchLifecycleTest(unittest.TestCase):
     def test_grouped_help_and_command_help(self) -> None:
         overview = self.run_script("researchctl.py", "--help")
         self.assertIn("Recover and inspect", overview.stdout)
+        self.assertIn("hygiene", overview.stdout)
         self.assertIn("Typical cycle", overview.stdout)
         command = self.run_script("researchctl.py", "help", "new")
         self.assertIn("--template", command.stdout)
         self.assertIn("--hypothesis-family", command.stdout)
+        self.assertIn("replication", command.stdout)
+
+    def test_understanding_stage_precedes_replication_baseline(self) -> None:
+        self.run_script(
+            "init_research_state.py",
+            "--root",
+            str(self.root),
+            "--project-id",
+            "paper-reproduction-test",
+            "--repo",
+            str(self.root),
+            "--stage",
+            "understanding",
+            "--north-star",
+            "Understand and reproduce one published result",
+            "--primary-problem",
+            "Resolve the paper, code, and evaluation protocol",
+            "--stage-exit-gate",
+            "claim-protocol matrix is complete",
+            "--primary-metric",
+            "protocol fields resolved",
+            "--promotion-gate",
+            "one feasible reproduction target is selected",
+        )
+        state_path = self.root / "research" / "project_state.yaml"
+        state = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(state["stage"], "understanding")
+        self.assertIsNone(state["canonical_baseline"])
+
+        audit = self.run_script(
+            "audit_research_state.py", "--root", str(self.root), "--strict", "--json"
+        )
+        self.assertTrue(json.loads(audit.stdout)["ok"])
+        status = self.run_script(
+            "research_status.py", "--root", str(self.root), "--json"
+        )
+        self.assertEqual(
+            json.loads(status.stdout)["next_action"]["action"],
+            "complete_paper_protocol_audit",
+        )
+
+        self.run_script(
+            "set_project_stage.py",
+            "--root",
+            str(self.root),
+            "--stage",
+            "reproduction",
+            "--north-star",
+            "Reproduce one published result",
+            "--primary-problem",
+            "Match the frozen reference curve",
+            "--baseline-id",
+            "BASE-PAPER-0001",
+            "--baseline-name",
+            "Author public reimplementation",
+            "--baseline-config",
+            "configs/paper.yaml",
+            "--evaluation-protocol",
+            "paper table protocol",
+            "--stage-exit-gate",
+            "one target result has a symmetric verdict",
+        )
+        result = self.run_script(
+            "new_experiment.py",
+            "--root",
+            str(self.root),
+            "--template",
+            "replication",
+            "--title",
+            "Reproduce the paper baseline",
+            "--question",
+            "Does the author implementation reproduce the declared score?",
+            "--hypothesis",
+            "The frozen implementation reaches the published performance envelope.",
+            "--hypothesis-family",
+            "paper-baseline",
+            "--reproduction-kind",
+            "author_reimplementation",
+            "--target-claim",
+            "Table 1 baseline score",
+            "--reference-artifact",
+            "paper-table-1",
+            "--protocol-match",
+            "same task, budget, preprocessing, and evaluation",
+            "--metric",
+            "per-seed return and aggregate interval",
+            "--stop-condition",
+            "stop on protocol drift or non-finite training",
+            "--completion-signal",
+            "comparison artifact exists",
+        )
+        experiment_id = json.loads(result.stdout)["id"]
+        records = [
+            json.loads(line)
+            for line in (self.root / "research" / "experiments.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        experiment = next(record for record in records if record.get("id") == experiment_id)
+        self.assertEqual(experiment["cycle_class"], "replication")
+        self.assertEqual(
+            experiment["replication_target"]["kind"], "author_reimplementation"
+        )
+
+        config = self.root / "expanded-paper.yaml"
+        config.write_text("task: paper-task\n", encoding="utf-8")
+        missing_repeats = self.run_script(
+            "freeze_experiment.py",
+            "--root",
+            str(self.root),
+            "--expanded-config",
+            config.name,
+            "--data-slice",
+            "paper task",
+            "--output-path",
+            "outputs/paper-baseline",
+            check=False,
+        )
+        self.assertNotEqual(missing_repeats.returncode, 0)
+        self.assertIn("seed-policy", missing_repeats.stderr)
 
     def test_full_lifecycle_and_strict_audit(self) -> None:
         self.initialize()
+        self.assertTrue((self.root / ".gitignore").is_file())
+        for directory in (
+            "configs/baselines",
+            "configs/experiments",
+            "references/manifests",
+            "discussion/claude",
+            "reports/daily",
+        ):
+            self.assertTrue((self.root / directory).is_dir())
         for filename in (
             "CURRENT_STATE.md",
             "PLAN.md",
@@ -512,6 +642,25 @@ class ResearchLifecycleTest(unittest.TestCase):
             "audit_research_state.py", "--root", str(self.root), "--strict", "--json"
         )
         self.assertTrue(json.loads(audit.stdout)["ok"])
+
+    def test_workspace_hygiene_is_read_only_and_flags_untracked_source(self) -> None:
+        self.initialize()
+        self.run_command("git", "-C", str(self.root), "add", ".")
+        self.run_command(
+            "git", "-C", str(self.root), "commit", "-q", "-m", "initialize control plane"
+        )
+        scratch = self.root / "scratch.py"
+        scratch.write_text("print('untracked')\n", encoding="utf-8")
+
+        result = self.run_script(
+            "researchctl.py", "hygiene", "--root", str(self.root), "--json"
+        )
+        value = json.loads(result.stdout)
+        self.assertTrue(value["ok"])
+        self.assertFalse(value["strict_ok"])
+        self.assertIn("scratch.py", value["untracked_source_like"])
+        self.assertTrue(any("no remote" in warning for warning in value["warnings"]))
+        self.assertTrue(scratch.exists())
 
     def test_scheduler_detects_stagnation_and_avoids_duplicate_tasks(self) -> None:
         self.initialize()

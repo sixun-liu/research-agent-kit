@@ -79,12 +79,12 @@ def main() -> int:
     cycle_class = str(experiment.get("cycle_class") or "formal")
     if args.decision == "promote" and not experiment.get("formal_claim_eligible", True):
         raise SystemExit(f"A {cycle_class} cycle is diagnostic-only and cannot be promoted")
-    if cycle_class == "formal" and any(
+    if cycle_class in {"formal", "replication"} and any(
         value is None
         for value in (args.human_confirmation, args.scoreboard_status, args.claim_status)
     ):
         raise SystemExit(
-            "A formal experiment requires --human-confirmation, --scoreboard-status, and --claim-status"
+            "A formal or replication cycle requires --human-confirmation, --scoreboard-status, and --claim-status"
         )
     limitations = list(args.limitation)
     if not limitations:
@@ -95,7 +95,7 @@ def main() -> int:
         }
         default_limitation = default_limitations.get(cycle_class)
         if not default_limitation:
-            raise SystemExit("At least one --limitation is required for a formal experiment")
+            raise SystemExit("At least one --limitation is required for a formal or replication cycle")
         limitations = [default_limitation]
 
     experiment_events = [

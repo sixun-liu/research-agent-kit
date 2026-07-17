@@ -1,6 +1,6 @@
 ---
 name: research-experiment-loop
-description: Run reproducible scientific or engineering research with explicit project stages, canonical baselines, preregistered hypotheses, frozen provenance, machine-readable registries, cross-cycle interrupt scheduling, theory-practice balance, offline-to-online evidence ladders, visual review artifacts, symmetric verdicts, and claim closure. Use when starting or resuming research experiments, planning autonomous compute work, auditing old results, detecting stagnation or repeated failures, balancing theory with practice, converging competing method routes, investigating surprising results, transferring a research workflow to a new project, or deciding whether evidence is strong enough to promote a method or paper claim.
+description: Understand papers, reproduce published results, and run reproducible scientific or engineering research with explicit project stages, canonical baselines, preregistered hypotheses, frozen provenance, machine-readable registries, cross-cycle interrupt scheduling, theory-practice balance, offline-to-online evidence ladders, visual review artifacts, symmetric verdicts, and claim closure. Use when starting paper study or replication, resuming research experiments, planning autonomous compute work, auditing old results, detecting stagnation or repeated failures, balancing theory with practice, converging competing method routes, investigating surprising results, transferring a research workflow to a new project, or deciding whether evidence is strong enough to promote a method or paper claim.
 ---
 
 # Research Experiment Loop
@@ -10,15 +10,27 @@ Use this skill to turn exploratory research into small, auditable experiment cyc
 ## Start Here
 
 1. Read the nearest `AGENTS.md` and existing project control docs first.
-2. Run `scripts/researchctl.py status` from the project root for a compact recovery view, then run
+2. When creating, Git-initializing, naming, or reorganizing a project, read
+   `references/git-and-naming.md` and `references/workspace-layout.md`. Run the read-only workspace
+   hygiene audit before and after a boundary move.
+3. For paper-led work, read `references/literature-workflow.md` and
+   `references/paper-reproduction.md`. Keep collaborator deliveries in a staging inbox, snapshot
+   verified materials into `references/`, and start in `understanding`. Freeze the baseline only
+   after paper version, code lineage, target claim, protocol, reference artifact, and cost envelope
+   are known, then enter `reproduction`.
+4. Run `scripts/researchctl.py status` from the project root for a compact recovery view, then run
    `scripts/audit_research_state.py --root <project>` when a `research/` registry exists.
-3. If no registry exists, run `scripts/init_research_state.py`; supply the north star, primary problem,
+5. If no registry exists, run `scripts/init_research_state.py`; supply the north star, primary problem,
    canonical baseline, evaluation protocol, and at least one stage-exit gate.
-4. Use `scripts/set_project_stage.py` only at an experiment boundary. Keep one canonical baseline, one
+6. Use `scripts/set_project_stage.py` only at an experiment boundary. Keep one canonical baseline, one
    primary problem, and one active candidate; park unrelated lanes explicitly.
-5. Create one falsifiable experiment with `scripts/new_experiment.py` before changing runtime code or
-   launching compute. Use `--template probe|oracle|instrumentation` for diagnostic-only work; only
-   `formal` cycles may be promoted.
+7. Paper reading and protocol recovery are control tasks, not experiments. Before reproduction compute,
+   create a `replication` cycle. Before exploratory method changes, create one falsifiable experiment.
+   Use `--template probe|oracle|instrumentation` for diagnostic-only work; only formal or replication
+   cycles may be promoted.
+8. Treat workflow changes as separate control work. Follow `references/workflow-evolution.md`; never
+   auto-upgrade an active or frozen experiment, and require explicit user approval for changes to
+   schema, provenance, verdict semantics, lifecycle, or agent authority.
 
 Project instructions always override this generic workflow.
 
@@ -34,6 +46,8 @@ Do not demote a breakthrough lead merely because it was unplanned. Record its al
 ### 1. Recover State
 
 - Identify the canonical repo, branch, commit, dirty state, active experiment, current best baseline, and promotion gate.
+- Distinguish the control, runtime, workflow, third-party, and artifact-store roles; do not collapse
+  their provenance into one repo field.
 - Confirm the current stage, north star, primary problem, canonical baseline ID, and parked lanes.
 - Distinguish historical clues from fingerprinted evidence.
 - Do not batch-clean untracked research artifacts.
@@ -50,6 +64,8 @@ If the experiment cannot distinguish at least two explanations, redesign it befo
 - Bind dump, analysis, and online validation to one tracked code state.
 - Record expanded config, data slice, seed/repetition policy, output path, and forbidden priors.
 - If source changes, commit or otherwise fingerprint it before regenerating evidence.
+- Formal and replication cycles require a tracked-clean source state. Once frozen, do not rewrite,
+  squash, or force-push the referenced history.
 - Diagnostic templates inherit completion signals and project forbidden inputs. Formal cycles still
   require explicit seed and repetition policy.
 
@@ -113,8 +129,16 @@ Subagents may act as read-only scout, blind visual observer, mechanism red-team,
 ## Resources
 
 - `references/research-cycle.md`: detailed execution and long-run autonomy loop.
+- `references/literature-workflow.md`: literature search, screening, anchored extraction, synthesis,
+  stable reference ingestion, claim promotion, and external research-workflow adapters.
+- `references/paper-reproduction.md`: paper understanding, code lineage, protocol recovery, result
+  replication, cost gates, and the transition into open-ended research.
 - `references/evidence-and-verdicts.md`: evidence quartet, tail analysis, and verdict rules.
 - `references/project-contract.md`: directory, JSONL, review, Git, and subagent conventions.
+- `references/git-and-naming.md`: repo roles, branch/freeze/merge rules, identifiers, run tags, and unit-safe variable names.
+- `references/workspace-layout.md`: control-repo/data-root layout, directory width/depth heuristics, staging, and archival rules.
+- `references/workflow-evolution.md`: governed workflow feedback, versioning, migration, rollback, and explicit adoption.
+- `references/gpf-research-implementation-adapter.md`: bounded mapping from the Claude GPF research-implementation workflow into this lifecycle.
 - `references/stage-and-lifecycle.md`: stage transitions, canonical baselines, lifecycle commands, and domain profiles.
 - `references/research-scheduler.md`: cross-cycle triggers, priorities, task contracts, and creativity guardrails.
 - `references/method-patterns.md`: reusable Oracle, surgical, replay, fault-injection, canary, and control patterns.
@@ -134,3 +158,4 @@ Subagents may act as read-only scout, blind visual observer, mechanism red-team,
 - `scripts/relocate_project.py`: commit-checked project relocation with historical path aliases.
 - `scripts/research_status.py`: read-only compact project, experiment, review, task, and scheduler view.
 - `scripts/audit_research_state.py`: schema, references, paths, and Git audit.
+- `scripts/audit_workspace_hygiene.py`: read-only Git, naming, large-file, cache, and root-layout audit.

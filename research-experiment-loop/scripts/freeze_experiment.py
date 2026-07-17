@@ -57,8 +57,10 @@ def main() -> int:
     cycle_class = str(experiment.get("cycle_class") or "formal")
     seed_policy = args.seed_policy
     repeat_policy = args.repeat_policy
-    if cycle_class == "formal" and (not seed_policy or not repeat_policy):
-        raise SystemExit("A formal experiment requires --seed-policy and --repeat-policy")
+    if cycle_class in {"formal", "replication"} and (not seed_policy or not repeat_policy):
+        raise SystemExit(
+            "A formal or replication cycle requires --seed-policy and --repeat-policy"
+        )
     seed_policy = seed_policy or "deterministic or not applicable"
     repeat_policy = repeat_policy or "one discriminating diagnostic probe"
     completion_signals = args.completion_signal or list(experiment.get("completion_signals") or [])

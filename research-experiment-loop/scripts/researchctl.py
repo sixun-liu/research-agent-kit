@@ -24,6 +24,7 @@ SCRIPT_COMMANDS = {
     "stage": "set_project_stage.py",
     "status": "research_status.py",
     "audit": "audit_research_state.py",
+    "hygiene": "audit_workspace_hygiene.py",
     "new": "new_experiment.py",
     "freeze": "freeze_experiment.py",
     "checkpoint": "record_checkpoint.py",
@@ -44,13 +45,14 @@ COMMAND_GROUPS = (
             ("status", "compact project, active-cycle, audit, and scheduler state"),
             ("next", "print the next control-plane action"),
             ("audit", "validate schemas, references, paths, and Git provenance"),
+            ("hygiene", "audit Git, naming, caches, large files, and root layout"),
             ("list/show/find", "query experiments, artifacts, claims, insights, and tasks"),
         ),
     ),
     (
         "Run one cycle",
         (
-            ("new", "preregister one formal or diagnostic cycle"),
+            ("new", "preregister one replication, formal, or diagnostic cycle"),
             ("freeze", "freeze commit, config, data slice, output, and repeat policy"),
             ("checkpoint", "record cheap progress during a long active run"),
             ("observe", "append post-run observations separately from interpretation"),
@@ -86,6 +88,8 @@ def print_help() -> None:
         lines.append("")
     lines.extend(
         (
+            "Paper-led flow:",
+            "  understanding -> reproduction -> exploration -> attack -> convergence -> writing",
             "Typical cycle:",
             "  status -> new -> freeze -> checkpoint/observe/artifact -> close -> schedule",
             "",

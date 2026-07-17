@@ -41,7 +41,7 @@ def main() -> int:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument(
         "--template",
-        choices=("formal", "probe", "oracle", "instrumentation"),
+        choices=("formal", "replication", "probe", "oracle", "instrumentation"),
         default="formal",
         help="Use a strict formal card or a low-friction diagnostic template",
     )
@@ -56,6 +56,18 @@ def main() -> int:
     parser.add_argument("--independent-variable")
     parser.add_argument("--expected-action")
     parser.add_argument("--completion-signal", action="append", default=[])
+    parser.add_argument(
+        "--reproduction-kind",
+        choices=(
+            "exact_artifact",
+            "author_reimplementation",
+            "independent_reimplementation",
+            "conceptual",
+        ),
+    )
+    parser.add_argument("--target-claim")
+    parser.add_argument("--reference-artifact", action="append", default=[])
+    parser.add_argument("--protocol-match", action="append", default=[])
     parser.add_argument("--claim-id", action="append", default=[])
     parser.add_argument("--lane", choices=("planned", "breakthrough_followup"), default="planned")
     parser.add_argument("--priority", choices=("low", "normal", "high"), default="normal")
@@ -82,6 +94,7 @@ def main() -> int:
     work_mode = args.work_mode or (
         "instrumentation" if args.template == "instrumentation" else "practice"
     )
+    replication_target = None
     if args.template == "formal":
         independent_variable = require_value("independent-variable", args.independent_variable)
         expected_action = require_value("expected-action", args.expected_action)
@@ -97,6 +110,35 @@ def main() -> int:
         completion_signals = args.completion_signal
         evidence_authority = "formal_candidate"
         formal_claim_eligible = True
+    elif args.template == "replication":
+        reproduction_kind = require_value("reproduction-kind", args.reproduction_kind)
+        target_claim = require_value("target-claim", args.target_claim)
+        require_list("reference-artifact", args.reference_artifact)
+        require_list("protocol-match", args.protocol_match)
+        require_list("metric", args.metric)
+        require_list("stop-condition", args.stop_condition)
+        require_list("completion-signal", args.completion_signal)
+        independent_variable = args.independent_variable or (
+            "No method intervention; reproduce the pinned reference implementation and protocol."
+        )
+        expected_action = args.expected_action or (
+            "The training and evaluation pipeline reaches the declared checkpoints and emits the target metrics."
+        )
+        alternatives = args.alternative or [
+            "A protocol, environment, code-version, seed, or compute mismatch explains any result gap."
+        ]
+        controls = args.control or list(args.protocol_match)
+        metrics = args.metric
+        stop_conditions = args.stop_condition
+        completion_signals = args.completion_signal
+        evidence_authority = "replication_candidate"
+        formal_claim_eligible = True
+        replication_target = {
+            "kind": reproduction_kind,
+            "claim": target_claim,
+            "reference_artifacts": args.reference_artifact,
+            "protocol_matches": args.protocol_match,
+        }
     else:
         independent_variable = args.independent_variable or (
             "The diagnostic intervention named in the hypothesis versus the frozen baseline."
@@ -179,6 +221,7 @@ def main() -> int:
         "controls": controls,
         "primary_metrics": metrics,
         "stop_conditions": stop_conditions,
+        "replication_target": replication_target,
         "evidence_plan": {"numerical": [], "spatial": [], "temporal": [], "causal": []},
         "provenance": {
             "analysis_repo": snapshot["repo"],
@@ -197,6 +240,17 @@ def main() -> int:
     controls_text = "\n".join(f"- {item}" for item in controls)
     metrics_text = "\n".join(f"- {item}" for item in metrics)
     stops_text = "\n".join(f"- {item}" for item in stop_conditions)
+    replication_text = ""
+    if replication_target:
+        references_text = "；".join(replication_target["reference_artifacts"])
+        protocol_text = "；".join(replication_target["protocol_matches"])
+        replication_text = (
+            "\n## 复现目标\n\n"
+            f"- 类型：`{replication_target['kind']}`\n"
+            f"- 目标主张：{replication_target['claim']}\n"
+            f"- 参考产物：{references_text}\n"
+            f"- 协议匹配：{protocol_text}\n"
+        )
     card_path.write_text(
         f"""# {experiment_id}：{args.title}
 
@@ -220,6 +274,7 @@ def main() -> int:
 ## 假说
 
 {hypothesis}
+{replication_text}
 
 ## 替代解释
 
