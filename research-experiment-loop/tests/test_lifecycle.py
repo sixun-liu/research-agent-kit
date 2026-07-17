@@ -177,11 +177,46 @@ class ResearchLifecycleTest(unittest.TestCase):
         overview = self.run_script("researchctl.py", "--help")
         self.assertIn("Recover and inspect", overview.stdout)
         self.assertIn("hygiene", overview.stdout)
+        self.assertIn("docs", overview.stdout)
         self.assertIn("Typical cycle", overview.stdout)
         command = self.run_script("researchctl.py", "help", "new")
         self.assertIn("--template", command.stdout)
         self.assertIn("--hypothesis-family", command.stdout)
         self.assertIn("replication", command.stdout)
+
+    def test_control_doc_templates_and_read_only_audit(self) -> None:
+        self.initialize()
+        before = {
+            path.name: path.read_text(encoding="utf-8")
+            for path in self.root.glob("*.md")
+        }
+        result = self.run_script(
+            "researchctl.py", "docs", "--root", str(self.root), "--strict", "--json"
+        )
+        value = json.loads(result.stdout)
+        self.assertTrue(value["strict_ok"])
+        self.assertEqual(value["documents"]["TODO.md"]["completed_items"], 0)
+        self.assertTrue((self.root / "reports" / "daily" / "TEMPLATE.md").is_file())
+        after = {
+            path.name: path.read_text(encoding="utf-8")
+            for path in self.root.glob("*.md")
+        }
+        self.assertEqual(before, after)
+
+        todo = self.root / "TODO.md"
+        todo.write_text(
+            todo.read_text(encoding="utf-8")
+            + "\n".join(f"- [x] completed {index}" for index in range(4))
+            + "\n",
+            encoding="utf-8",
+        )
+        warning = self.run_script(
+            "researchctl.py", "docs", "--root", str(self.root), "--json"
+        )
+        warning_value = json.loads(warning.stdout)
+        self.assertTrue(warning_value["ok"])
+        self.assertFalse(warning_value["strict_ok"])
+        self.assertTrue(any("completed items" in item for item in warning_value["warnings"]))
 
     def test_understanding_stage_precedes_replication_baseline(self) -> None:
         self.run_script(

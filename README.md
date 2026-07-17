@@ -61,12 +61,14 @@ cd research-agent-kit
 researchctl status
 researchctl audit --strict
 researchctl hygiene --strict
+researchctl docs --strict
 researchctl next
 ```
 
 - `status`：恢复 stage、baseline、active experiment、review 和 scheduler 状态；
 - `audit --strict`：检查 registry、路径、Git commit 和生命周期闭环；
 - `hygiene --strict`：检查 control repo 的 Git、命名、未跟踪源码、大文件、cache 和根目录布局；
+- `docs --strict`：检查热控制文档格式、职责边界、TODO/DEVLOG 和人工复核指针；
 - `next`：只给出当前控制面的下一动作，不自动启动实验。
 
 项目级 `AGENTS.md`、禁用输入和评测协议始终高于通用 skill。
@@ -117,7 +119,8 @@ researchctl find "mapping ghost"
 ```
 
 `PLAN/TODO/CURRENT_STATE` 是人工控制入口；`project_state.yaml` 和 JSONL registry 是机器真源。
-不要手工维护重复的实验索引。
+不要手工维护重复的实验索引，也不要在每个生命周期命令后机械改写所有 Markdown。控制文档采用
+事件触发更新，规范见 `references/control-docs.md`。
 
 ## 项目迁移
 

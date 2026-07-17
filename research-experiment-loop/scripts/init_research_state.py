@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -27,6 +28,16 @@ def write_once(path: Path, content: str, created: list[str], skipped: list[str])
     created.append(str(path))
 
 
+def render_template(path: Path, values: dict[str, str]) -> str:
+    content = path.read_text(encoding="utf-8")
+    for key, value in values.items():
+        content = content.replace("{{" + key + "}}", value)
+    unresolved = sorted(set(re.findall(r"\{\{([a-z_]+)\}\}", content)))
+    if unresolved:
+        raise SystemExit(f"Unresolved template values in {path}: {', '.join(unresolved)}")
+    return content
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True, help="Project root")
@@ -34,6 +45,7 @@ def main() -> int:
     parser.add_argument("--repo", type=Path, help="Canonical Git repository; defaults to root")
     parser.add_argument("--review-root", type=Path, help="Human review directory; defaults to <root>/figures/review")
     parser.add_argument("--language", default="zh-CN")
+    parser.add_argument("--created-by", default="unassigned", help="Stable maintainer role for control docs")
     parser.add_argument("--domain", default="generic")
     parser.add_argument("--stage", choices=sorted(VALID_STAGES), default="exploration")
     parser.add_argument("--north-star", required=True)
@@ -215,51 +227,33 @@ human_review:
     write_once(research / "scheduler.yaml", scheduler_template, created, skipped)
     (research / "cards").mkdir(parents=True, exist_ok=True)
     exit_gates = "\n".join(f"- [ ] {value}" for value in args.stage_exit_gate)
+    doc_template_root = template_root / "control-docs"
+    template_values = {
+        "updated_at": now,
+        "date": now[:10],
+        "maintainer": args.created_by,
+        "stage": args.stage,
+        "north_star": args.north_star,
+        "primary_problem": args.primary_problem,
+        "next_action": next_action,
+        "exit_gates": exit_gates,
+    }
+    for filename in (
+        "CURRENT_STATE.md",
+        "PLAN.md",
+        "TODO.md",
+        "DEVLOG.md",
+        "RESULTS_SCOREBOARD.md",
+    ):
+        write_once(
+            root / filename,
+            render_template(doc_template_root / f"{filename}.tmpl", template_values),
+            created,
+            skipped,
+        )
     write_once(
-        root / "CURRENT_STATE.md",
-        "# CURRENT_STATE\n\n"
-        "> 机器状态请运行 `researchctl.py status`；本文只保存人工综合。\n\n"
-        "## 一句话判断\n\n待综合。\n\n"
-        f"## 当前主要矛盾\n\n{args.primary_problem}\n\n"
-        f"## 下一项决策\n\n{next_action}\n",
-        created,
-        skipped,
-    )
-    write_once(
-        root / "PLAN.md",
-        "# PLAN\n\n"
-        f"- 阶段：`{args.stage}`\n"
-        f"- 北极星：{args.north_star}\n"
-        f"- 当前主要矛盾：{args.primary_problem}\n\n"
-        "## 阶段退出门\n\n"
-        f"{exit_gates}\n\n"
-        "## 活动路线\n\n待建立。\n\n"
-        "## Parked Lanes\n\n暂无。\n",
-        created,
-        skipped,
-    )
-    write_once(
-        root / "TODO.md",
-        "# TODO\n\n"
-        "仅保留近期可执行项；实验事实和完成历史不堆在这里。\n\n"
-        f"## Now\n\n- [ ] {next_action}\n\n"
-        "## Waiting\n\n暂无。\n",
-        created,
-        skipped,
-    )
-    write_once(
-        root / "DEVLOG.md",
-        "# DEVLOG\n\n"
-        "只追加持久决策、路线升降级和机制结论；原始运行输出留在 registry/artifact。\n",
-        created,
-        skipped,
-    )
-    write_once(
-        root / "RESULTS_SCOREBOARD.md",
-        "# RESULTS_SCOREBOARD\n\n"
-        "只收录协议一致、可比较的 formal 结果；probe/oracle/instrumentation 不进入正式表。\n\n"
-        "| Experiment | Protocol | Primary | Tail | Mapping/Visual | Verdict |\n"
-        "|---|---|---:|---:|---|---|\n",
+        root / "reports" / "daily" / "TEMPLATE.md",
+        render_template(doc_template_root / "DAILY_REPORT.md.tmpl", template_values),
         created,
         skipped,
     )
