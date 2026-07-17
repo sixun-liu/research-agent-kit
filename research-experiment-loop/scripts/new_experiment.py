@@ -10,11 +10,13 @@ from pathlib import Path
 
 from research_state_lib import (
     append_jsonl,
-    canonical_repo,
-    git_snapshot,
+    attribution_fields,
     load_jsonl,
     load_yaml,
     next_id,
+    primary_repository_snapshot,
+    repository_snapshot_issues,
+    repository_snapshots,
     update_project_state,
     utc_now,
 )
@@ -75,6 +77,7 @@ def main() -> int:
     parser.add_argument("--control", action="append", default=[])
     parser.add_argument("--metric", action="append", default=[])
     parser.add_argument("--stop-condition", action="append", default=[])
+    parser.add_argument("--created-by")
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -173,9 +176,11 @@ def main() -> int:
     if card_path.exists() or review_dir.exists():
         raise SystemExit(f"Refusing to overwrite {experiment_id} artifacts")
 
-    snapshot = git_snapshot(canonical_repo(root, state))
-    if not snapshot["tracked_clean"]:
-        raise SystemExit("Refusing to preregister against a canonical repo with tracked changes")
+    snapshots = repository_snapshots(root, state)
+    issues = repository_snapshot_issues(snapshots, require_clean=True)
+    if issues:
+        raise SystemExit("Refusing to preregister: " + "; ".join(issues))
+    snapshot = primary_repository_snapshot(snapshots)
     baseline = state.get("canonical_baseline", {})
     if not isinstance(baseline, dict):
         baseline = {}
@@ -228,12 +233,14 @@ def main() -> int:
             "analysis_branch": snapshot["branch"],
             "analysis_commit": snapshot["commit"],
             "analysis_tracked_clean": snapshot["tracked_clean"],
+            "repositories": snapshots,
         },
         "compute_policy": "lowest-cost evidence required before expensive launch",
         "human_review_path": str(review_dir),
         "human_visual_confirmation": "pending",
         "verdict": None,
     }
+    record.update(attribution_fields(args.created_by))
 
     card_path.parent.mkdir(parents=True, exist_ok=True)
     alternatives_text = "\n".join(f"- {item}" for item in alternatives)

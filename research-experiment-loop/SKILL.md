@@ -66,11 +66,15 @@ If the experiment cannot distinguish at least two explanations, redesign it befo
 - Run `scripts/freeze_experiment.py` before outcome inspection.
 - Bind dump, analysis, and online validation to one tracked code state.
 - Record expanded config, data slice, seed/repetition policy, output path, and forbidden priors.
+- When `research/repositories.yaml` exists, snapshot every declared control, runtime, workflow, and
+  third-party Git role; reject tracked changes or drift from a pinned commit before formal compute.
 - If source changes, commit or otherwise fingerprint it before regenerating evidence.
 - Formal and replication cycles require a tracked-clean source state. Once frozen, do not rewrite,
   squash, or force-push the referenced history.
 - Diagnostic templates inherit completion signals and project forbidden inputs. Formal cycles still
   require explicit seed and repetition policy.
+- Set `RESEARCH_ACTOR` or pass `--created-by`; use `--approved-by` only for a real user/reviewer
+  decision. Attribution supplements commit provenance and never replaces it.
 
 ### 4. Use The Evidence Ladder
 

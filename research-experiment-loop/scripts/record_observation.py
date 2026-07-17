@@ -10,6 +10,7 @@ from pathlib import Path
 from research_state_lib import (
     TERMINAL_EXPERIMENT_STATUSES,
     append_jsonl,
+    attribution_fields,
     experiment_records,
     latest_experiment_state,
     next_id,
@@ -26,6 +27,7 @@ def main() -> int:
     parser.add_argument("--unexpected", action="store_true")
     parser.add_argument("--follow-up")
     parser.add_argument("--artifact-id", action="append", default=[])
+    parser.add_argument("--created-by")
     args = parser.parse_args()
 
     if not args.observation:
@@ -50,6 +52,7 @@ def main() -> int:
         "follow_up": args.follow_up,
         "artifacts": args.artifact_id,
     }
+    event.update(attribution_fields(args.created_by))
     append_jsonl(registry, event)
     print(json.dumps(event, ensure_ascii=False, indent=2))
     return 0

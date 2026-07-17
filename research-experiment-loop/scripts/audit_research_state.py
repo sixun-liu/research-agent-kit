@@ -23,6 +23,9 @@ from research_state_lib import (
     latest_experiment_state,
     latest_task_state,
     load_yaml,
+    repository_manifest_path,
+    repository_snapshot_issues,
+    repository_snapshots,
     resolve_recorded_path,
 )
 
@@ -560,8 +563,21 @@ def main() -> int:
             if claim.get("human_visual_confirmation") == "pending":
                 errors.append(f"{claim.get('id')}: paper-ready claim has pending human confirmation")
 
-    repo_value = state.get("canonical_repo", {}).get("path") if isinstance(state.get("canonical_repo"), dict) else None
-    if repo_value:
+    manifest_path = repository_manifest_path(root, state)
+    repository_roles: list[str] = []
+    if manifest_path:
+        try:
+            snapshots = repository_snapshots(root, state)
+            repository_roles = sorted(snapshots)
+            warnings.extend(repository_snapshot_issues(snapshots, require_clean=True))
+        except SystemExit as exc:
+            errors.append(str(exc))
+    else:
+        repo_value = state.get("canonical_repo", {}).get("path") if isinstance(state.get("canonical_repo"), dict) else None
+        if not repo_value:
+            warnings.append("canonical_repo.path is not recorded")
+            repo_value = None
+    if not manifest_path and repo_value:
         repo = Path(str(repo_value)).expanduser()
         if not repo.is_absolute():
             repo = root / repo
@@ -576,9 +592,6 @@ def main() -> int:
             _, tracked = git(repo, "status", "--porcelain", "--untracked-files=no")
             if tracked:
                 warnings.append("canonical repo has tracked changes")
-    else:
-        warnings.append("canonical_repo.path is not recorded")
-
     result = {
         "root": str(root),
         "active_experiment_id": active_id,
@@ -588,6 +601,7 @@ def main() -> int:
             if isinstance(state.get("canonical_baseline"), dict)
             else None
         ),
+        "repository_roles": repository_roles,
         "record_counts": {name: len(rows) for name, rows in all_records.items()},
         "errors": errors,
         "warnings": warnings,

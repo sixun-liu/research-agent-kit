@@ -108,9 +108,13 @@ JSONL 每行一个 object，第一行是 `registry_meta`。追加记录优于重
 
 ## Provenance
 
-最小 provenance：repo、branch、commit、tracked dirty、expanded config、数据切片、
+最小 provenance：各 control/runtime/workflow/third-party repo 的 branch、commit、tracked dirty，expanded config、数据切片、
 输出路径、strict/online 约束和 external prior 状态。没有 commit 指纹的旧产物标为
 `historical_only`，可用于提出假说，不可单独支撑 headline。
+
+多仓角色由 `research/repositories.yaml` 声明；schema、pin 和 attribution 规则见
+`git-and-naming.md`。旧项目没有 manifest 时继续读取 `canonical_repo`，但新 formal/replication
+应在实验边界迁移到多仓快照。
 
 Canonical baseline 还必须绑定稳定 ID、commit、展开配置和评测协议。每个 v2 实验记录
 `baseline_id`、唯一变量、预期动作和完成正向信号。

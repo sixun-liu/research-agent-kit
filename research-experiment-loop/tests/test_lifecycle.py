@@ -77,9 +77,9 @@ class ResearchLifecycleTest(unittest.TestCase):
         title: str = "Test candidate",
         family: str = "candidate-consumer",
         work_mode: str = "practice",
+        created_by: str | None = None,
     ) -> dict:
-        result = self.run_script(
-            "new_experiment.py",
+        arguments = [
             "--root",
             str(self.root),
             "--title",
@@ -106,8 +106,27 @@ class ResearchLifecycleTest(unittest.TestCase):
             "primary metric and worst-case metric",
             "--stop-condition",
             "stop if the expected action is absent",
+        ]
+        if created_by:
+            arguments.extend(("--created-by", created_by))
+        result = self.run_script(
+            "new_experiment.py",
+            *arguments,
         )
         return json.loads(result.stdout)
+
+    def make_external_repo(self, name: str) -> Path:
+        path = Path(tempfile.mkdtemp(prefix=f"research-{name}-"))
+        self.addCleanup(shutil.rmtree, path, True)
+        self.run_command("git", "init", "-q", str(path))
+        self.run_command("git", "-C", str(path), "config", "user.name", "research-test")
+        self.run_command(
+            "git", "-C", str(path), "config", "user.email", "research-test@example.invalid"
+        )
+        (path / "README.md").write_text(f"# {name}\n", encoding="utf-8")
+        self.run_command("git", "-C", str(path), "add", "README.md")
+        self.run_command("git", "-C", str(path), "commit", "-q", "-m", f"init {name}")
+        return path
 
     def run_negative_cycle(self, index: int, family: str = "stalled-family") -> str:
         experiment_id = self.create_experiment(
@@ -217,6 +236,111 @@ class ResearchLifecycleTest(unittest.TestCase):
         self.assertTrue(warning_value["ok"])
         self.assertFalse(warning_value["strict_ok"])
         self.assertTrue(any("completed items" in item for item in warning_value["warnings"]))
+
+    def test_multi_repository_freeze_and_actor_attribution(self) -> None:
+        self.initialize()
+        runtime = self.make_external_repo("runtime")
+        workflow = self.make_external_repo("workflow")
+        self.run_command(
+            "git",
+            "-C",
+            str(workflow),
+            "remote",
+            "add",
+            "origin",
+            "https://secret-token@github.com/example/workflow.git",
+        )
+        runtime_commit = self.run_command("git", "-C", str(runtime), "rev-parse", "HEAD").stdout.strip()
+        workflow_commit = self.run_command("git", "-C", str(workflow), "rev-parse", "HEAD").stdout.strip()
+        manifest_path = self.root / "research" / "repositories.yaml"
+        manifest_path.write_text(
+            yaml.safe_dump(
+                {
+                    "schema_version": 2,
+                    "repositories": {
+                        "control": {"path": str(self.root), "required_clean": True},
+                        "runtime": {
+                            "path": str(runtime),
+                            "commit": runtime_commit,
+                            "required_clean": True,
+                        },
+                        "workflow": {
+                            "path": str(workflow),
+                            "commit": workflow_commit,
+                            "version": "v-test",
+                            "required_clean": True,
+                        },
+                    },
+                    "third_party": {},
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        self.run_command("git", "-C", str(self.root), "add", ".")
+        self.run_command(
+            "git", "-C", str(self.root), "commit", "-q", "-m", "initialize multi repo control"
+        )
+
+        created = self.create_experiment(created_by="codex")
+        experiment = next(
+            json.loads(line)
+            for line in (self.root / "research" / "experiments.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if json.loads(line).get("id") == created["id"]
+        )
+        self.assertEqual(experiment["created_by"], "codex")
+        self.assertEqual(
+            set(experiment["provenance"]["repositories"]),
+            {"control", "runtime", "workflow"},
+        )
+        self.assertEqual(
+            experiment["provenance"]["repositories"]["workflow"]["remote"],
+            "https://github.com/example/workflow.git",
+        )
+        self.run_command("git", "-C", str(self.root), "add", ".")
+        self.run_command("git", "-C", str(self.root), "commit", "-q", "-m", "preregister")
+        config = self.root / "expanded-multi.yaml"
+        config.write_text("candidate: true\n", encoding="utf-8")
+        self.run_command("git", "-C", str(self.root), "add", config.name)
+        self.run_command("git", "-C", str(self.root), "commit", "-q", "-m", "freeze config")
+        frozen = self.run_script(
+            "freeze_experiment.py",
+            "--root",
+            str(self.root),
+            "--expanded-config",
+            config.name,
+            "--data-slice",
+            "held-out split",
+            "--output-path",
+            "outputs/multi-repo",
+            "--seed-policy",
+            "seed 1",
+            "--repeat-policy",
+            "one formal run",
+            "--completion-signal",
+            "result.json exists",
+            "--created-by",
+            "codex",
+            "--approved-by",
+            "user",
+        )
+        freeze_event = json.loads(frozen.stdout)
+        self.assertEqual(freeze_event["created_by"], "codex")
+        self.assertEqual(freeze_event["approved_by"], "user")
+        self.assertEqual(
+            freeze_event["provenance"]["repositories"]["runtime"]["commit"],
+            runtime_commit,
+        )
+
+        self.run_command("git", "-C", str(runtime), "commit", "--allow-empty", "-q", "-m", "drift")
+        audit = self.run_script(
+            "audit_research_state.py", "--root", str(self.root), "--json"
+        )
+        audit_value = json.loads(audit.stdout)
+        self.assertIn("runtime", audit_value["repository_roles"])
+        self.assertTrue(any("runtime commit drift" in item for item in audit_value["warnings"]))
 
     def test_understanding_stage_precedes_replication_baseline(self) -> None:
         self.run_script(

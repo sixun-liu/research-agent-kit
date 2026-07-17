@@ -11,6 +11,7 @@ from research_state_lib import (
     TERMINAL_EXPERIMENT_STATUSES,
     VALID_PROGRESS_TYPES,
     append_jsonl,
+    attribution_fields,
     elapsed_hours,
     experiment_records,
     latest_experiment_state,
@@ -34,6 +35,7 @@ def main() -> int:
         choices=("pending", "occurred", "absent", "not_applicable"),
         default="pending",
     )
+    parser.add_argument("--created-by")
     parser.add_argument(
         "--completion-status",
         choices=("pending", "confirmed", "failed", "not_applicable"),
@@ -83,6 +85,7 @@ def main() -> int:
         "completion_signal_status": args.completion_status,
         "artifacts": args.artifact_id,
     }
+    event.update(attribution_fields(args.created_by))
     append_jsonl(registry, event)
 
     card = root / "research" / "cards" / f"{experiment_id}.md"

@@ -14,7 +14,9 @@ from research_state_lib import REGISTRIES, VALID_STAGES, utc_now
 
 def git_value(repo: Path, *args: str) -> str | None:
     try:
-        return subprocess.check_output(["git", "-C", str(repo), *args], text=True).strip()
+        return subprocess.check_output(
+            ["git", "-C", str(repo), *args], text=True, stderr=subprocess.DEVNULL
+        ).strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
 
@@ -36,6 +38,14 @@ def render_template(path: Path, values: dict[str, str]) -> str:
     if unresolved:
         raise SystemExit(f"Unresolved template values in {path}: {', '.join(unresolved)}")
     return content
+
+
+def dump_yaml(value: dict) -> str:
+    try:
+        import yaml
+    except ImportError as exc:
+        raise SystemExit("PyYAML is required for research state commands") from exc
+    return yaml.safe_dump(value, allow_unicode=True, sort_keys=False, width=1000)
 
 
 def main() -> int:
@@ -132,9 +142,10 @@ def main() -> int:
         if all(baseline_values)
         else None
     )
-    state = f'''schema_version: 3
+    state = f'''schema_version: 4
 project_id: {json.dumps(args.project_id)}
 updated_at: {json.dumps(now)}
+updated_by: {json.dumps(args.created_by)}
 language: {json.dumps(args.language)}
 stage: {json.dumps(args.stage)}
 north_star: {json.dumps(args.north_star)}
@@ -144,6 +155,7 @@ active_candidate: null
 canonical_baseline: {json.dumps(baseline, ensure_ascii=False)}
 parked_lanes: []
 stage_exit_gates: {json.dumps(args.stage_exit_gate, ensure_ascii=False)}
+repository_manifest: research/repositories.yaml
 canonical_repo:
   path: {json.dumps(str(repo))}
   branch: {json.dumps(branch)}
@@ -154,6 +166,39 @@ human_review:
   latest: {json.dumps(str(review / "LATEST.md"))}
 '''
     write_once(research / "project_state.yaml", state, created, skipped)
+    control_top = git_value(root, "rev-parse", "--show-toplevel")
+    control_path = Path(control_top).resolve() if control_top else root
+    runtime_top = git_value(repo, "rev-parse", "--show-toplevel")
+    runtime_path = Path(runtime_top).resolve() if runtime_top else repo
+    repositories = {
+        "control": {
+            "path": str(control_path),
+            "remote": git_value(control_path, "remote", "get-url", "origin"),
+            "commit_source": "git-rev-parse-head",
+            "required_clean": True,
+        },
+        "runtime": {
+            "path": str(runtime_path),
+            "remote": git_value(runtime_path, "remote", "get-url", "origin"),
+            "commit_source": "git-rev-parse-head",
+            "required_clean": True,
+        },
+    }
+    repository_manifest = {
+        "schema_version": 2,
+        "updated_at": now,
+        "repositories": repositories,
+        "third_party": {},
+        "stores": {
+            "human_review": str(review),
+        },
+    }
+    write_once(
+        research / "repositories.yaml",
+        dump_yaml(repository_manifest),
+        created,
+        skipped,
+    )
     for filename, prefix in REGISTRIES.items():
         meta = {
             "record_type": "registry_meta",

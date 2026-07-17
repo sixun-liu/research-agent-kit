@@ -13,6 +13,7 @@ from research_state_lib import (
     VALID_DECISIONS,
     VALID_PROGRESS_TYPES,
     append_jsonl,
+    attribution_fields,
     elapsed_hours,
     experiment_records,
     latest_experiment_state,
@@ -52,6 +53,8 @@ def main() -> int:
     parser.add_argument("--human-confirmation", choices=sorted(VALID_CONFIRMATIONS))
     parser.add_argument("--scoreboard-status", choices=CHECKLIST_VALUES)
     parser.add_argument("--claim-status", choices=CHECKLIST_VALUES)
+    parser.add_argument("--created-by")
+    parser.add_argument("--approved-by")
     args = parser.parse_args()
 
     if not args.observation:
@@ -206,6 +209,7 @@ def main() -> int:
             "human_review": human_confirmation,
         },
     }
+    event.update(attribution_fields(args.created_by, args.approved_by))
     append_jsonl(registry, event)
 
     card = root / "research" / "cards" / f"{experiment_id}.md"

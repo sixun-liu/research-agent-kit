@@ -12,6 +12,7 @@ formal/replication 的 provenance 要求。
 5. 配置变量与单位
 6. Freeze 前检查
 7. 历史项目迁移
+8. 多仓 manifest 与协作归属
 
 ## 1. 仓库角色
 
@@ -151,3 +152,41 @@ diagnostic/debug-only。
 - 从下一实验起执行 clean-commit-before-freeze；
 - 迁移只在实验边界进行，之后运行 strict audit 与 workspace hygiene audit。
 
+## 8. 多仓 manifest 与协作归属
+
+项目在 `research/repositories.yaml` 声明 Git 角色。可变 control repo 使用当前 HEAD；固定 runtime、
+workflow release 和 third-party 可以声明 `commit`。最小 schema：
+
+```yaml
+schema_version: 2
+repositories:
+  control:
+    path: /data/projects/example
+    remote: https://github.com/user/example.git
+    commit_source: git-rev-parse-head
+    required_clean: true
+  runtime:
+    path: /data/runtime/author-code
+    remote: https://github.com/author/code.git
+    commit: 0123456789abcdef
+    required_clean: true
+  workflow:
+    path: /data/tools/research-agent-kit
+    remote: https://github.com/user/research-agent-kit.git
+    commit: abcdef0123456789
+    version: v0.2.0
+    required_clean: true
+third_party: {}
+stores:
+  runs: /data/runs/example
+  artifacts: /data/artifacts/example
+```
+
+`new` 与 `freeze` 在写 registry 前读取该文件，记录每个 Git role 的实际 root、remote、branch、
+commit、tracked/worktree clean 和 untracked count。formal/replication 遇到 tracked dirty 或 pinned
+commit drift 时拒绝继续。写入 registry 后 control repo 出现预期 diff 不反向污染刚刚记录的快照；
+运行前应按项目契约决定是否提交 freeze event。
+
+协作身份通过 `RESEARCH_ACTOR=codex` 或 `--created-by codex` 写入事件；需要真实审批时才使用
+`--approved-by user`。branch 名表达任务，不编码 agent；commit 保存内容作者，registry 保存动作
+执行者和审批者，DEVLOG 保存面向人的综合。
