@@ -59,6 +59,10 @@ project/
 scoreboard 和 DEVLOG，并把 TODO 收敛为唯一下一问题。PLAN 只在主要矛盾、路线地位或阶段退出门
 变化时更新。不要为了“同步”在每轮机械重写全部文档。
 
+统一页头、agent/approval 归属、DEVLOG 事件格式、TODO owner/trigger 和日报模板见
+`control-docs.md`。写作按方向变化、持久决策和正式结案触发，不按每条 CLI 命令触发；使用
+`researchctl docs` 做只读一致性检查。
+
 ## Workspace hygiene
 
 目录整理属于 provenance，不是装饰。只在实验周期边界进行，并遵循：

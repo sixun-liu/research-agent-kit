@@ -31,6 +31,9 @@ Use this skill to turn exploratory research into small, auditable experiment cyc
 8. Treat workflow changes as separate control work. Follow `references/workflow-evolution.md`; never
    auto-upgrade an active or frozen experiment, and require explicit user approval for changes to
    schema, provenance, verdict semantics, lifecycle, or agent authority.
+9. Treat Markdown control files as event-triggered human views, not a second state machine. Read
+   `references/control-docs.md` when creating or reorganizing `CURRENT_STATE`, `PLAN`, `TODO`,
+   `DEVLOG`, `RESULTS_SCOREBOARD`, or daily reports; run `researchctl docs` after meaningful updates.
 
 Project instructions always override this generic workflow.
 
@@ -138,6 +141,7 @@ Subagents may act as read-only scout, blind visual observer, mechanism red-team,
 - `references/git-and-naming.md`: repo roles, branch/freeze/merge rules, identifiers, run tags, and unit-safe variable names.
 - `references/workspace-layout.md`: control-repo/data-root layout, directory width/depth heuristics, staging, and archival rules.
 - `references/workflow-evolution.md`: governed workflow feedback, versioning, migration, rollback, and explicit adoption.
+- `references/control-docs.md`: low-burden document ownership, templates, update triggers, attribution, and audit rules.
 - `references/gpf-research-implementation-adapter.md`: bounded mapping from the Claude GPF research-implementation workflow into this lifecycle.
 - `references/stage-and-lifecycle.md`: stage transitions, canonical baselines, lifecycle commands, and domain profiles.
 - `references/research-scheduler.md`: cross-cycle triggers, priorities, task contracts, and creativity guardrails.
@@ -159,3 +163,4 @@ Subagents may act as read-only scout, blind visual observer, mechanism red-team,
 - `scripts/research_status.py`: read-only compact project, experiment, review, task, and scheduler view.
 - `scripts/audit_research_state.py`: schema, references, paths, and Git audit.
 - `scripts/audit_workspace_hygiene.py`: read-only Git, naming, large-file, cache, and root-layout audit.
+- `scripts/audit_control_docs.py`: read-only metadata, structure, TODO, DEVLOG, stage, and review-pointer audit.
