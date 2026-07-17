@@ -9,12 +9,14 @@ from pathlib import Path
 
 from research_state_lib import (
     append_jsonl,
-    canonical_repo,
+    attribution_fields,
     experiment_records,
-    git_snapshot,
     latest_experiment_state,
     load_yaml,
     next_id,
+    primary_repository_snapshot,
+    repository_snapshot_issues,
+    repository_snapshots,
     resolve_project_path,
     resolve_experiment_id,
     sha256_file,
@@ -35,6 +37,8 @@ def main() -> int:
     parser.add_argument("--forbidden-input", action="append", default=[])
     parser.add_argument("--completion-signal", action="append", default=[])
     parser.add_argument("--command")
+    parser.add_argument("--created-by")
+    parser.add_argument("--approved-by")
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -71,9 +75,11 @@ def main() -> int:
     profile_path = root / "research" / "profile.yaml"
     profile = load_yaml(profile_path) if profile_path.exists() else {}
     forbidden_inputs = args.forbidden_input or list(profile.get("forbidden_inputs") or [])
-    snapshot = git_snapshot(canonical_repo(root, state))
-    if not snapshot["tracked_clean"]:
-        raise SystemExit("Refusing to freeze provenance with tracked Git changes")
+    snapshots = repository_snapshots(root, state)
+    issues = repository_snapshot_issues(snapshots, require_clean=True)
+    if issues:
+        raise SystemExit("Refusing to freeze provenance: " + "; ".join(issues))
+    snapshot = primary_repository_snapshot(snapshots)
 
     registry = root / "research" / "experiments.jsonl"
     event = {
@@ -100,8 +106,10 @@ def main() -> int:
             "forbidden_inputs": forbidden_inputs,
             "command": args.command,
             "completion_signals": completion_signals,
+            "repositories": snapshots,
         },
     }
+    event.update(attribution_fields(args.created_by, args.approved_by))
     append_jsonl(registry, event)
     update_project_state(
         root,

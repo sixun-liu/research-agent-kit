@@ -9,9 +9,11 @@ from pathlib import Path
 
 from research_state_lib import (
     VALID_STAGES,
-    canonical_repo,
-    git_snapshot,
+    attribution_fields,
     load_yaml,
+    primary_repository_snapshot,
+    repository_snapshot_issues,
+    repository_snapshots,
     update_project_state,
     utc_now,
     write_yaml,
@@ -37,6 +39,8 @@ def main() -> int:
     parser.add_argument("--forbidden-input", action="append", default=[])
     parser.add_argument("--promotion-gate", action="append", default=[])
     parser.add_argument("--review-requirement", action="append", default=[])
+    parser.add_argument("--created-by")
+    parser.add_argument("--approved-by")
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -61,9 +65,11 @@ def main() -> int:
             "Entering reproduction or a later stage requires a freshly frozen canonical baseline"
         )
 
-    snapshot = git_snapshot(canonical_repo(root, state))
-    if not snapshot["tracked_clean"]:
-        raise SystemExit("Refusing to freeze a canonical baseline with tracked Git changes")
+    snapshots = repository_snapshots(root, state)
+    issues = repository_snapshot_issues(snapshots, require_clean=True)
+    if issues:
+        raise SystemExit("Refusing to freeze a canonical baseline: " + "; ".join(issues))
+    snapshot = primary_repository_snapshot(snapshots)
 
     profile_path = root / "research" / "profile.yaml"
     if profile_path.exists():
@@ -131,9 +137,10 @@ def main() -> int:
             "config": args.baseline_config,
             "evaluation_protocol": args.evaluation_protocol,
         }
+    attribution = attribution_fields(args.created_by, args.approved_by)
     updated = update_project_state(
         root,
-        schema_version=max(int(state.get("schema_version", 1)), 3),
+        schema_version=max(int(state.get("schema_version", 1)), 4),
         stage=args.stage,
         north_star=args.north_star,
         primary_problem=args.primary_problem,
@@ -147,6 +154,9 @@ def main() -> int:
             "commit": snapshot["commit"],
             "tracked_clean_at_snapshot": snapshot["tracked_clean"],
         },
+        repository_snapshots=snapshots,
+        updated_by=attribution.get("created_by"),
+        approved_by=attribution.get("approved_by"),
     )
     print(
         json.dumps(

@@ -122,6 +122,10 @@ researchctl find "mapping ghost"
 不要手工维护重复的实验索引，也不要在每个生命周期命令后机械改写所有 Markdown。控制文档采用
 事件触发更新，规范见 `references/control-docs.md`。
 
+多仓项目在 `research/repositories.yaml` 分别声明 control、runtime、workflow 和 third-party。
+`new`/`freeze` 自动记录各仓实际 commit 并拒绝 pinned commit drift。协作身份可通过
+`RESEARCH_ACTOR=codex` 设置，真实审批使用 `--approved-by user`；身份字段不能替代 Git provenance。
+
 ## 项目迁移
 
 研究项目应把工具、控制面、算法代码和大数据分开管理：

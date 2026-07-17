@@ -6,6 +6,8 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -211,14 +213,139 @@ def git_snapshot(repo: Path) -> dict[str, Any]:
     code, commit = run("rev-parse", "HEAD")
     if code:
         raise SystemExit(f"Canonical repo is not a usable Git repository: {repo}")
+    _, top_level = run("rev-parse", "--show-toplevel")
     _, branch = run("rev-parse", "--abbrev-ref", "HEAD")
     _, tracked = run("status", "--porcelain", "--untracked-files=no")
+    _, worktree = run("status", "--porcelain", "--untracked-files=normal")
+    remote = None
+    for remote_name in ("origin", "upstream"):
+        remote_code, remote_value = run("remote", "get-url", remote_name)
+        if not remote_code and remote_value:
+            remote = re.sub(r"^(https?://)[^/@]+@", r"\1", remote_value)
+            break
     return {
-        "repo": str(repo.resolve()),
+        "repo": top_level or str(repo.resolve()),
         "branch": branch or "unknown",
         "commit": commit,
         "tracked_clean": tracked == "",
+        "worktree_clean": worktree == "",
+        "untracked_count": sum(1 for line in worktree.splitlines() if line.startswith("??")),
+        "remote": remote,
     }
+
+
+def attribution_fields(
+    created_by: str | None = None,
+    approved_by: str | None = None,
+) -> dict[str, str]:
+    """Return optional stable actor metadata without forcing per-command repetition."""
+    actor = created_by or os.environ.get("RESEARCH_ACTOR")
+    approver = approved_by or os.environ.get("RESEARCH_APPROVER")
+    result: dict[str, str] = {}
+    if actor:
+        result["created_by"] = actor
+    if approver:
+        result["approved_by"] = approver
+    return result
+
+
+def repository_manifest_path(root: Path, state: dict[str, Any] | None = None) -> Path | None:
+    state = state or load_yaml(root / "research" / "project_state.yaml")
+    value = state.get("repository_manifest")
+    if value:
+        path = Path(str(value)).expanduser()
+        return path.resolve() if path.is_absolute() else (root / path).resolve()
+    default = root / "research" / "repositories.yaml"
+    return default.resolve() if default.is_file() else None
+
+
+def _repository_entries(manifest: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    entries: list[tuple[str, dict[str, Any]]] = []
+    if isinstance(manifest.get("repositories"), dict):
+        for role, value in manifest["repositories"].items():
+            if isinstance(value, dict) and value.get("path"):
+                entries.append((str(role), value))
+    roles = manifest.get("roles")
+    if isinstance(roles, dict):
+        for role in ("control", "runtime", "workflow"):
+            value = roles.get(role)
+            if isinstance(value, dict) and value.get("path"):
+                entries.append((role, value))
+        third_party = roles.get("third_party")
+        if isinstance(third_party, dict):
+            for name, value in third_party.items():
+                if isinstance(value, dict) and value.get("path"):
+                    entries.append((f"third_party/{name}", value))
+    third_party = manifest.get("third_party")
+    if isinstance(third_party, dict):
+        for name, value in third_party.items():
+            if isinstance(value, dict) and value.get("path"):
+                entries.append((f"third_party/{name}", value))
+    deduplicated: dict[str, dict[str, Any]] = {}
+    for role, value in entries:
+        deduplicated[role] = value
+    return list(deduplicated.items())
+
+
+def repository_snapshots(
+    root: Path,
+    state: dict[str, Any] | None = None,
+) -> dict[str, dict[str, Any]]:
+    state = state or load_yaml(root / "research" / "project_state.yaml")
+    manifest_path = repository_manifest_path(root, state)
+    if not manifest_path:
+        return {"canonical": git_snapshot(canonical_repo(root, state))}
+    if not manifest_path.is_file():
+        raise SystemExit(f"Repository manifest does not exist: {manifest_path}")
+    manifest = load_yaml(manifest_path)
+    entries = _repository_entries(manifest)
+    if not entries:
+        raise SystemExit(f"Repository manifest has no Git repository entries: {manifest_path}")
+    snapshots: dict[str, dict[str, Any]] = {}
+    for role, descriptor in entries:
+        declared = Path(str(descriptor["path"])).expanduser()
+        path = declared.resolve() if declared.is_absolute() else (root / declared).resolve()
+        snapshot = git_snapshot(path)
+        expected_commit = str(descriptor.get("commit") or "")
+        snapshot.update(
+            {
+                "role": role,
+                "declared_path": str(declared),
+                "declared_remote": descriptor.get("remote"),
+                "expected_commit": expected_commit or None,
+                "commit_matches_manifest": (
+                    not expected_commit or snapshot["commit"].startswith(expected_commit)
+                ),
+                "required_clean": bool(descriptor.get("required_clean", True)),
+                "version": descriptor.get("version"),
+            }
+        )
+        snapshots[role] = snapshot
+    return snapshots
+
+
+def primary_repository_snapshot(snapshots: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    for role in ("control", "canonical", "runtime"):
+        if role in snapshots:
+            return snapshots[role]
+    return next(iter(snapshots.values()))
+
+
+def repository_snapshot_issues(
+    snapshots: dict[str, dict[str, Any]],
+    *,
+    require_clean: bool,
+) -> list[str]:
+    issues: list[str] = []
+    for role, snapshot in snapshots.items():
+        if not snapshot.get("commit_matches_manifest", True):
+            issues.append(
+                f"{role} commit drift: expected {snapshot.get('expected_commit')}, "
+                f"current {snapshot.get('commit')}"
+            )
+        if require_clean and snapshot.get("required_clean", True) and not snapshot["tracked_clean"]:
+            issues.append(f"{role} has tracked changes: {snapshot['repo']}")
+    return issues
 
 
 def canonical_repo(root: Path, state: dict[str, Any] | None = None) -> Path:
