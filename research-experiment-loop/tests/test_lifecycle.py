@@ -342,6 +342,64 @@ class ResearchLifecycleTest(unittest.TestCase):
         self.assertIn("runtime", audit_value["repository_roles"])
         self.assertTrue(any("runtime commit drift" in item for item in audit_value["warnings"]))
 
+    def test_pending_human_review_is_next_action_not_audit_repair(self) -> None:
+        self.initialize()
+        experiment_id = self.create_experiment()["id"]
+        config = self.root / "pending-review.yaml"
+        config.write_text("candidate: true\n", encoding="utf-8")
+        self.run_script(
+            "freeze_experiment.py",
+            "--root",
+            str(self.root),
+            "--expanded-config",
+            config.name,
+            "--data-slice",
+            "held-out split",
+            "--output-path",
+            "outputs/pending-review",
+            "--seed-policy",
+            "seed 1",
+            "--repeat-policy",
+            "one run",
+            "--completion-signal",
+            "result.json exists",
+        )
+        self.run_script(
+            "close_experiment.py",
+            "--root",
+            str(self.root),
+            "--verdict",
+            "awaiting_human_review",
+            "--decision",
+            "promising_unresolved",
+            "--observation",
+            "The frozen comparison artifact is ready for review.",
+            "--interpretation",
+            "The result remains provisional until visual review.",
+            "--limitation",
+            "Human review is pending.",
+            "--next",
+            "Review the compact artifact.",
+            "--progress-type",
+            "uncertainty_reduction",
+            "--action-status",
+            "occurred",
+            "--completion-status",
+            "confirmed",
+            "--practice-output",
+            "A reviewable comparison exists.",
+            "--human-confirmation",
+            "pending",
+            "--scoreboard-status",
+            "updated",
+            "--claim-status",
+            "not_required",
+        )
+        status = self.run_script("research_status.py", "--root", str(self.root), "--json")
+        value = json.loads(status.stdout)
+        self.assertFalse(value["audit"]["strict_ok"])
+        self.assertEqual(value["next_action"]["action"], f"human_review:{experiment_id}")
+
     def test_understanding_stage_precedes_replication_baseline(self) -> None:
         self.run_script(
             "init_research_state.py",

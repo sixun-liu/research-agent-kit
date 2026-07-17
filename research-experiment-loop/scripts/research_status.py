@@ -76,11 +76,17 @@ def infer_next_action(
     pending_reviews: list[str],
     recommendations: list[dict[str, Any]],
 ) -> dict[str, str]:
-    if not audit.get("strict_ok", False):
+    nonblocking_warning_suffixes = ("closure checklist pending: human_review",)
+    blocking_warnings = [
+        value
+        for value in audit.get("warnings", [])
+        if not any(str(value).endswith(suffix) for suffix in nonblocking_warning_suffixes)
+    ]
+    if audit.get("errors") or blocking_warnings:
         return {
             "action": "repair_audit",
             "reason": (
-                "The control plane has audit errors or warnings that can invalidate evidence."
+                "The control plane has audit errors or blocking warnings that can invalidate evidence."
             ),
         }
     if active:
